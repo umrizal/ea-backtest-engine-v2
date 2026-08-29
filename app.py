@@ -968,118 +968,41 @@ def simulate_data(job_id):
 # ROUTES - AI EXPLAINER
 # ============================================================
 
-@app.route(
-    "/api/explain-ea",
-    methods=["POST"]
-)
+@app.route('/api/explain-ea', methods=['POST'])
 def explain_ea():
-
-    body = request.get_json(
-        force=True,
-        silent=True
-    ) or {}
-
-    mql5_code = body.get(
-        "mql5_code",
-        ""
-    )
-
-    # ========================================================
-    # VALIDATION
-    # ========================================================
-
-    if not isinstance(mql5_code, str):
-
-        mql5_code = str(mql5_code)
-
-    if not mql5_code.strip():
-
-        return jsonify({
-
-            "success": False,
-
-            "message": (
-                "Kode MQL5 kosong."
-            )
-
-        }), 400
-
-    # ========================================================
-    # AI AVAILABILITY
-    # ========================================================
-
-    if not AI_EXPLAINER_AVAILABLE or \
-       ai_explainer is None:
-
-        return jsonify({
-
-            "success": False,
-
-            "message": (
-                "AI Explainer belum berhasil "
-                "diinisialisasi."
-            )
-
-        }), 503
-
-    # ========================================================
-    # RUN AI
-    # ========================================================
-
     try:
+        data = request.json or {}
+        code = data.get('code', '')
 
-        print(
-            f"[AI] Explain EA request. "
-            f"Code length={len(mql5_code)}"
-        )
+        if not code or not code.strip():
+            return jsonify({
+                "success": False,
+                "error": "Kode MQL5 / EA tidak boleh kosong."
+            }), 400
 
-        # ====================================================
-        # IMPORTANT FIX
-        # ====================================================
+        # Memanggil AI Explainer
+        result = ai_explainer.explain_ea(code)
 
-        explanation = ai_explainer.explain_ea(
-            mql5_code
-        )
-
-        print("[AI] Explain EA berhasil.")
+        # Perbaikan Semantik: Jika AI mengembalikan indikator error (❌ atau ⚠️)
+        if isinstance(result, str) and (result.startswith("❌") or result.startswith("⚠️")):
+            return jsonify({
+                "success": False,
+                "explanation": result,
+                "result": result,
+                "error": result
+            }), 500
 
         return jsonify({
-
             "success": True,
-
-            "explanation": explanation,
-
-            # Alias untuk compatibility
-            "result": explanation,
-
-            "code_length": len(mql5_code),
-
-            "timestamp": datetime.now().isoformat()
-
+            "explanation": result,
+            "result": result
         }), 200
 
     except Exception as e:
-
-        error_trace = traceback.format_exc()
-
-        print("=" * 70)
-        print("[AI EXPLAINER ERROR]")
-        print("=" * 70)
-        print(error_trace)
-        print("=" * 70)
-
         return jsonify({
-
             "success": False,
-
-            "message": (
-                f"Error menganalisis EA: {str(e)}"
-            ),
-
-            "error_type": type(e).__name__
-
+            "error": str(e)
         }), 500
-
 
 # ============================================================
 # ROUTES - REPORT
