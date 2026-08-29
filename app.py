@@ -41,10 +41,12 @@ os.makedirs(TEMPLATES_DIR, exist_ok=True)
 app = Flask(__name__, template_folder=TEMPLATES_DIR)
 CORS(app)
 
-# Initialize Flaz OpenAI Client
+# Inisialisasi OpenAI Client dengan API Key default/fallback
+flaz_api_key = os.getenv("FLAZ_API_KEY", "sk-P9rVt9W7B7JosCPzfIrknQ")
+
 client = OpenAI(
-    api_key=os.getenv("FLAZ_API_KEY"),
-    base_url="https://ai.flaz.id/v1"
+    api_key=flaz_api_key,
+    base_url=os.getenv("FLAZ_BASE_URL", "https://ai.flaz.id/v1")
 )
 
 # ============================================================
