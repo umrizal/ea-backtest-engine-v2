@@ -265,106 +265,41 @@ def ai_status():
     }), 200
 
 
-# ============================================================
-# ROUTES - BEDAH LOGIKA
-# ============================================================
-
-@app.route("/api/bedah-logika", methods=["POST"])
-def bedah_logika():
-
-    body = request.get_json(
-        force=True,
-        silent=True
-    ) or {}
-
-    # Support dua nama field
-    mql5_code = (
-        body.get("code", "")
-        or body.get("mql5_code", "")
-    )
-
-    # ========================================================
-    # VALIDATION
-    # ========================================================
-
-    if not isinstance(mql5_code, str):
-        mql5_code = str(mql5_code)
-
-    if not mql5_code.strip():
-
-        return jsonify({
-            "success": False,
-            "message": (
-                "Kode MQL5 kosong. "
-                "Harap paste kode atau upload file EA."
-            )
-        }), 400
-
-    # ========================================================
-    # CHECK AI
-    # ========================================================
-
-    if not AI_EXPLAINER_AVAILABLE or ai_explainer is None:
-
-        return jsonify({
-            "success": False,
-            "message": "AI Explainer belum berhasil diinisialisasi."
-        }), 503
-
-    # ========================================================
-    # RUN AI
-    # ========================================================
-
+@app.route('/api/explain-ea', methods=['POST'])
+def explain_ea():
     try:
+        data = request.json or {}
+        code = data.get('code', '')
 
-        print(
-            f"[AI] Bedah Logika request diterima. "
-            f"Code length: {len(mql5_code)}"
-        )
+        if not code:
+            return jsonify({
+                "success": False,
+                "error": "Kode MQL5 / EA tidak boleh kosong."
+            }), 400
 
-        # IMPORTANT:
-        # Gunakan instance, bukan class.
-        explanation = ai_explainer.explain_ea(
-            mql5_code
-        )
+        # Panggil AI Explainer
+        result = ai_explainer.explain_ea(code)
 
-        print("[AI] Bedah Logika berhasil.")
+        # Cek apakah hasil analisis mengembalikan error / timeout
+        if isinstance(result, str) and (result.startswith("❌") or "Error" in result or "timed out" in result):
+            return jsonify({
+                "success": False,
+                "error": result,
+                "result": result
+            }), 500
 
         return jsonify({
             "success": True,
-
-            "result": explanation,
-
-            # Alias supaya frontend lama/baru sama-sama bisa
-            # menggunakan response.
-            "explanation": explanation,
-
-            "code_length": len(mql5_code),
-
-            "timestamp": datetime.now().isoformat()
+            "explanation": result,
+            "result": result
         }), 200
 
     except Exception as e:
-
-        error_trace = traceback.format_exc()
-
-        print("=" * 70)
-        print("[AI ERROR] Bedah Logika gagal")
-        print("=" * 70)
-        print(error_trace)
-        print("=" * 70)
-
         return jsonify({
             "success": False,
-
-            "message": (
-                f"Error menganalisis EA: {str(e)}"
-            ),
-
-            "error_type": type(e).__name__
+            "error": str(e)
         }), 500
-
-
+    
 # ============================================================
 # ROUTES - FILE UPLOAD
 # ============================================================
