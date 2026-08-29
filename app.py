@@ -251,9 +251,10 @@ def health():
 def explain_ea():
     try:
         data = request.json or {}
-        code = data.get('code', '')
+        # Menerima baik field 'code' maupun 'mql5_code' dari frontend
+        code = data.get('code') or data.get('mql5_code', '')
 
-        if not code:
+        if not code or not str(code).strip():
             return jsonify({
                 "success": False,
                 "error": "Kode MQL5 / EA tidak boleh kosong."
@@ -261,7 +262,6 @@ def explain_ea():
 
         result = ai_explainer.explain_ea(code)
 
-        # Cek jika result berupa string error/gagal
         if isinstance(result, str) and (result.startswith("❌") or result.startswith("⚠️")):
             return jsonify({
                 "success": False,
