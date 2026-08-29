@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Pintarin Laboratorium EA — Scientific Quantitative Trading Research</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg: #070a10; --panel: #0d131f; --border: #1a2436; --gold: #d9a75c;
+      --green: #10b981; --red: #f43f5e; --yellow: #f59e0b; --blue: #3b82f6; --text: #e2e8f0;
+      --text-muted: #64748b; --font-mono: 'JetBrains Mono', monospace; --font-sans: 'Inter', sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font-sans); font-size: 13px; line-height: 1.5; }
+    .layout { display: flex; min-height: 100vh; }
+    .sidebar { width: 260px; background: #05070c; border-right: 1px solid var(--border); padding: 20px 14px; position: fixed; inset: 0 auto 0 0; z-index: 10; }
+    .brand { text-align: center; margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 16px; }
+    .brand h1 { font-size: 16px; font-weight: 800; color: #fff; letter-spacing: 0.1em; }
+    .brand span { color: var(--gold); font-size: 10px; letter-spacing: 0.2em; display: block; margin-top: 4px; }
+    .nav-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--text-muted); margin: 16px 10px 6px; font-weight: 700; }
+    .nav button { width: 100%; text-align: left; background: none; border: none; color: #94a3b8; padding: 10px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; transition: 0.15s; margin-bottom: 4px; }
+    .nav button:hover { background: #0e1726; color: #fff; }
+    .nav button.active { background: linear-gradient(90deg, rgba(217, 167, 92, 0.2), transparent); color: #fff; border-left: 3px solid var(--gold); }
+    .main { margin-left: 260px; width: calc(100% - 260px); padding: 24px 30px; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .page-title h2 { font-size: 22px; font-weight: 800; color: #fff; }
+    .page-title p { color: var(--text-muted); font-size: 11px; }
+    .actions { display: flex; gap: 10px; }
+    .btn { background: var(--panel); border: 1px solid var(--border); color: #fff; padding: 8px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+    .btn:hover { border-color: var(--gold); color: var(--gold); }
+    .btn.primary { background: linear-gradient(135deg, #a97a30, #7c5822); border-color: var(--gold); color: #fff; }
+    .btn.blue { background: linear-gradient(135deg, #1d4ed8, #1e40af); border-color: var(--blue); color: #fff; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .grid-control { display: grid; grid-template-columns: 380px 1fr; gap: 20px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin-bottom: 20px; }
+    .card h3 { font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
+    .form-group { margin-bottom: 12px; }
+    label { display: block; font-size: 10px; color: var(--text-muted); margin-bottom: 4px; font-weight: 700; text-transform: uppercase; }
+    input, select, textarea { width: 100%; padding: 8px 10px; background: #070c14; border: 1px solid var(--border); color: #fff; border-radius: 4px; font-family: var(--font-mono); font-size: 12px; box-sizing: border-box; }
+    input[type="date"] { color-scheme: dark; }
+    textarea { color: #10b981; resize: vertical; line-height: 1.4; }
+    .file-input-wrapper { position: relative; background: #070c14; border: 1px dashed var(--gold); border-radius: 6px; padding: 10px; text-align: center; cursor: pointer; }
+    .file-input-wrapper input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .progress-bar { width: 100%; background: #070c14; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 12px; display: none; border: 1px solid var(--border); }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--gold), #f59e0b); width: 0%; transition: width 0.2s; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+    .kpi-card { background: var(--panel); border: 1px solid var(--border); padding: 14px; border-radius: 8px; text-align: center; }
+    .kpi-card .label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; }
+    .kpi-card .val { font-family: var(--font-mono); font-size: 18px; font-weight: 800; color: var(--gold); margin-top: 4px; }
+    .table-wrap { overflow-x: auto; max-height: 280px; }
+    table { width: 100%; border-collapse: collapse; text-align: left; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 12px; }
+    th { color: var(--text-muted); font-size: 10px; text-transform: uppercase; font-weight: 700; background: #070c14; position: sticky; top: 0; }
+    td.mono { font-family: var(--font-mono); }
+    .badge { padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; display: inline-block; }
+    .badge.green { background: rgba(16, 185, 129, 0.15); color: var(--green); border: 1px solid var(--green); }
+    .badge.red { background: rgba(244, 63, 94, 0.15); color: var(--red); border: 1px solid var(--red); }
+    .badge.yellow { background: rgba(245, 158, 11, 0.15); color: var(--yellow); border: 1px solid var(--yellow); }
+    .view { display: none; }
+    .view.active { display: block; }
+    .ai-box { background: #070c14; border: 1px solid #1e293b; padding: 12px; border-radius: 6px; color: #94a3b8; font-family: var(--font-mono); font-size: 11px; white-space: pre-line; margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <h1>PINTARIN LAB</h1>
+      <span>QUANTITATIVE ENGINE</span>
+    </div>
+    <div class="nav-label">Terminal Navigation</div>
+    <div class="nav">
+      <button class="active" id="btn-nav-backtest" onclick="switchView('backtest')">⚡ Backtest Terminal</button>
+      <button id="btn-nav-leaderboard" onclick="switchView('leaderboard')">🏆 EA Leaderboard</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="page-title">
+        <h2>Pintarin Laboratorium EA v3.0</h2>
+        <p>Enterprise Quantitative Platform & MQL5 Transpiler Engine</p>
+      </div>
+      <div class="actions">
+        <button class="btn" onclick="fetchHistoryData()">🔄 Reload Histori DB</button>
+        <button class="btn primary" id="btnOpenReport" onclick="openMT5Report()" disabled>📄 View MT5 HTML Report</button>
+      </div>
+    </div>
+
+    <div id="view-backtest" class="view active">
+      <div class="grid-control">
+        <div class="card">
+          <h3>⚙️ Backtest & Transpiler Control</h3>
+          
+          <div class="form-group">
+            <label>📁 UPLOAD FILE EA (.MQ5 / .EX5)</label>
+            <div class="file-input-wrapper">
+              <span id="fileInputText" style="color: var(--gold); font-weight: 600;">Klik untuk Upload File EA .MQ5</span>
+              <input type="file" id="fileEaInput" accept=".ex5,.mq5,.ex4,.mq4,.set,.json" onchange="handleEaUpload(this)">
+            </div>
+            <small id="uploadStatus" style="color: var(--text-muted); font-size: 10px; display: block; margin-top: 4px;"></small>
+          </div>
+
+          <div class="form-group">
+            <label>📝 PASTE KODE MQL5 RAW (.MQ5)</label>
+            <textarea id="mql5CodeInput" rows="7" placeholder="// Paste kode EA MQL5 Anda di sini...
+input double TakeProfit = 50.0;
+input double StopLoss = 30.0;
+input double TrailingStop = 15.0;
+input double BreakEven = 10.0;
+input int FastMA = 10;
+input int SlowMA = 30;
+
+void OnTick() {
+    double ma1 = iMA(_Symbol, _Period, FastMA, 0, MODE_SMA, PRICE_CLOSE);
+    double ma2 = iMA(_Symbol, _Period, SlowMA, 0, MODE_SMA, PRICE_CLOSE);
+    if(ma1 > ma2) OrderSend(... BUY ...);
+}"></textarea>
+          </div>
+
+          <div style="display: flex; gap: 10px;">
+            <button class="btn blue" style="width: 100%; margin-bottom: 10px;" onclick="explainEaLogic()">🤖 Bedah Logika (AI Explainer)</button>
+          </div>
+
+          <div class="form-group">
+            <label>Nama EA / Strategi</label>
+            <input type="text" id="eaName" value="XAUUSD_MQL5_EA">
+          </div>
+
+          <div class="form-group">
+            <label>Symbol Broker</label>
+            <input type="text" id="symbolInput" value="XAUUSD.dmb">
+          </div>
+
+          <div class="form-group">
+            <label>📅 Tanggal Mulai</label>
+            <input type="date" id="startDate" value="2024-01-01">
+          </div>
+
+          <div class="form-group">
+            <label>📅 Tanggal Selesai</label>
+            <input type="date" id="endDate" value="2024-12-31">
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="form-group">
+              <label>Modal Awal ($)</label>
+              <input type="number" id="balance" value="10000">
+            </div>
+            <div class="form-group">
+              <label>Lot Size</label>
+              <input type="number" id="lot" step="0.01" value="0.1">
+            </div>
+          </div>
+
+          <button class="btn primary" id="btnRun" style="width: 100%; margin-top: 10px;" onclick="runCvmBacktest()">⚡ JALANKAN TRANSPILER & BACKTEST</button>
+          
+          <div class="progress-bar" id="progressBar">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+          <small id="statusText" style="color: var(--gold); font-size: 11px; display: block; text-align: center; margin-top: 6px;"></small>
+        </div>
+
+        <div>
+          <div class="kpi-grid">
+            <div class="kpi-card"><div class="label">NET PROFIT</div><div class="val" id="kpiProfit">$0</div></div>
+            <div class="kpi-card"><div class="label">PROFIT FACTOR</div><div class="val" id="kpiPF">0.0</div></div>
+            <div class="kpi-card"><div class="label">SORTINO RATIO</div><div class="val" id="kpiSortino">0.0</div></div>
+            <div class="kpi-card"><div class="label">MAX DRAWDOWN</div><div class="val" id="kpiDD">0%</div></div>
+          </div>
+
+          <div class="card" id="aiExplainerCard" style="display: none;">
+            <h3>🤖 AI Logika EA Explainer</h3>
+            <div class="ai-box" id="aiExplainerContent">Membedah logika EA...</div>
+          </div>
+
+          <div class="card">
+            <h3>📈 Equity Curve (Tick Simulation)</h3>
+            <canvas id="chartEquity" height="110"></canvas>
+          </div>
+
+          <div class="card">
+            <h3>📜 Log Transaksi Terakhir</h3>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Time</th><th>Order ID</th><th>Arah</th><th>Entry</th><th>Exit/Profit</th><th>Profit ($)</th></tr>
+                </thead>
+                <tbody id="tradeLogs">
+                  <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Belum ada backtest yang dijalankan.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-leaderboard" class="view">
+      <div class="card">
+        <h3>🏆 Scientific EA Leaderboard (SQLite History)</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Job ID</th>
+                <th>EA Name</th>
+                <th>Symbol</th>
+                <th>Year</th>
+                <th>Net Profit</th>
+                <th>Profit Factor</th>
+                <th>Sortino</th>
+                <th>Win Rate</th>
+                <th>Trades</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboardTable">
+              <tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Memuat Data Histori SQLite...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  const API_BASE = window.location.origin;
+  let equityChart = null;
+  let currentJobId = null;
+
+  function switchView(viewName) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+    
+    document.getElementById('view-' + viewName).classList.add('active');
+    document.getElementById('btn-nav-' + viewName).classList.add('active');
+    
+    if (viewName === 'leaderboard') {
+      fetchHistoryData();
+    }
+  }
+
+  async function handleEaUpload(input) {
+    if (!input.files || input.files.length === 0) return;
+    
+    const file = input.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const statusEl = document.getElementById('uploadStatus');
+    const inputLabel = document.getElementById('fileInputText');
+    
+    inputLabel.innerText = "📄 " + file.name;
+    statusEl.innerText = '⏳ Mengunggah file EA...';
+
+    try {
+      const res = await fetch(`${API_BASE}/api/upload-ea`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        document.getElementById('eaName').value = data.ea_name || file.name.split('.')[0];
+        if (data.mql5_code) {
+          document.getElementById('mql5CodeInput').value = data.mql5_code;
+        }
+        statusEl.innerText = `✅ EA & Kode Terdeteksi: ${data.ea_name}`;
+        statusEl.style.color = '#10b981';
+      } else {
+        statusEl.innerText = '❌ Gagal upload: ' + data.message;
+        statusEl.style.color = '#f43f5e';
+      }
+    } catch (err) {
+      statusEl.innerText = '⚠️ Gagal upload file.';
+      statusEl.style.color = '#f59e0b';
+    }
+  }
+
+  async function explainEaLogic() {
+    const code = document.getElementById('mql5CodeInput').value;
+    const card = document.getElementById('aiExplainerCard');
+    const box = document.getElementById('aiExplainerContent');
+
+    if (!code.trim()) {
+      alert("Harap tempelkan kode MQL5 (.mq5) terlebih dahulu.");
+      return;
+    }
+
+    card.style.display = 'block';
+    box.innerText = "⏳ AI sedang membaca & menganalisis struktur AST MQL5...";
+
+    try {
+      const res = await fetch(`${API_BASE}/api/explain-ea`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mql5_code: code })
+      });
+      const data = await res.json();
+      if (data.success) {
+        box.innerText = data.explanation;
+      } else {
+        box.innerText = "❌ Gagal menganalisis kode.";
+      }
+    } catch (e) {
+      box.innerText = "⚠️ Terjadi kesalahan koneksi API Explainer.";
+    }
+  }
+
+  async function runCvmBacktest() {
+    const btnRun = document.getElementById('btnRun');
+    const pBar = document.getElementById('progressBar');
+    const pFill = document.getElementById('progressFill');
+    const statusText = document.getElementById('statusText');
+
+    const startDateVal = document.getElementById('startDate').value;
+    const endDateVal = document.getElementById('endDate').value;
+    const yearVal = startDateVal ? startDateVal.split('-')[0] : "2024";
+
+    const payload = {
+      ea_name: document.getElementById('eaName').value,
+      symbol: document.getElementById('symbolInput').value,
+      year: yearVal,
+      start_date: startDateVal,
+      end_date: endDateVal,
+      balance: parseFloat(document.getElementById('balance').value),
+      lot: parseFloat(document.getElementById('lot').value),
+      mql5_code: document.getElementById('mql5CodeInput').value
+    };
+
+    try {
+      btnRun.disabled = true;
+      pBar.style.display = 'block';
+      pFill.style.width = '5%';
+      statusText.innerText = 'Membedah AST MQL5 & Mengirim Job...';
+
+      const res = await fetch(`${API_BASE}/api/run-backtest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        alert('Error: ' + data.message);
+        resetProgress();
+        return;
+      }
+
+      currentJobId = data.job_id;
+      pollJobStatus(data.job_id);
+
+    } catch (err) {
+      alert('Gagal terhubung ke Server Backtest!');
+      resetProgress();
+    }
+  }
+
+  function pollJobStatus(jobId) {
+    const pFill = document.getElementById('progressFill');
+    const statusText = document.getElementById('statusText');
+
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/backtest-status/${jobId}`);
+        const data = await res.json();
+
+        if (data.success) {
+          pFill.style.width = data.progress + '%';
+          statusText.innerText = `Memproses Simulasi Vectorized: ${data.progress}%`;
+
+          if (data.status === 'completed') {
+            clearInterval(timer);
+            statusText.innerText = 'Selesai! Mengambil hasil...';
+            fetchResult(jobId);
+          } else if (data.status === 'failed') {
+            clearInterval(timer);
+            alert('Proses Backtest Gagal: ' + (data.error || 'Terjadi kesalahan sistem'));
+            resetProgress();
+          }
+        }
+      } catch (e) {
+        clearInterval(timer);
+        resetProgress();
+      }
+    }, 1000);
+  }
+
+  async function fetchResult(jobId) {
+    try {
+      const res = await fetch(`${API_BASE}/api/backtest-result/${jobId}`);
+      const resData = await res.json();
+      
+      if (!resData.success || !resData.data) {
+        alert('Gagal mengambil data hasil backtest.');
+        resetProgress();
+        return;
+      }
+
+      const data = resData.data;
+
+      document.getElementById('kpiProfit').innerText = '$' + (data.net_profit || 0);
+      document.getElementById('kpiPF').innerText = data.profit_factor || '0.0';
+      document.getElementById('kpiSortino').innerText = data.sortino_ratio || '0.0';
+      document.getElementById('kpiDD').innerText = (data.max_drawdown_pct || 0) + '%';
+
+      document.getElementById('btnOpenReport').disabled = false;
+
+      renderChart(data.equity_curve || []);
+      renderLogs(data.trades || []);
+    } finally {
+      resetProgress();
+    }
+  }
+
+  function openMT5Report() {
+    if (currentJobId) {
+      window.open(`${API_BASE}/api/report/${currentJobId}`, '_blank');
+    }
+  }
+
+  function resetProgress() {
+    document.getElementById('btnRun').disabled = false;
+    document.getElementById('progressBar').style.display = 'none';
+    document.getElementById('statusText').innerText = '';
+  }
+
+  function renderChart(curve) {
+    const ctx = document.getElementById('chartEquity').getContext('2d');
+    if (equityChart) equityChart.destroy();
+
+    equityChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: curve.map(c => c.time),
+        datasets: [{
+          label: 'Equity ($)',
+          data: curve.map(c => c.equity),
+          borderColor: '#d9a75c',
+          borderWidth: 2,
+          fill: false,
+          pointRadius: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { display: false },
+          y: { grid: { color: '#1a2436' } }
+        }
+      }
+    });
+  }
+
+  function renderLogs(trades) {
+    const tbody = document.getElementById('tradeLogs');
+    tbody.innerHTML = '';
+    if (!trades || trades.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Tidak ada transaksi pada periode ini.</td></tr>';
+      return;
+    }
+    trades.slice(-20).reverse().forEach(t => {
+      tbody.innerHTML += `
+        <tr>
+          <td class="mono">${t.close_time || t.open_time}</td>
+          <td class="mono">${t.order_id}</td>
+          <td><b>${t.arah}</b></td>
+          <td class="mono">${t.harga_entry}</td>
+          <td class="mono">${t.comment || '-'}</td>
+          <td class="mono" style="color: ${t.profit >= 0 ? '#10b981' : '#f43f5e'}">$${t.profit}</td>
+        </tr>
+      `;
+    });
+  }
+
+  async function fetchHistoryData() {
+    const tbody = document.getElementById('leaderboardTable');
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Memuat Data Histori SQLite...</td></tr>';
+
+    try {
+      const res = await fetch(`${API_BASE}/api/history`);
+      const data = await res.json();
+      
+      if (data.success && data.history.length > 0) {
+        tbody.innerHTML = '';
+        data.history.forEach(r => {
+          tbody.innerHTML += `
+            <tr>
+              <td class="mono">${r.job_id.substring(0,8)}</td>
+              <td><b>${r.ea_name}</b></td>
+              <td>${r.symbol}</td>
+              <td class="mono">${r.year}</td>
+              <td class="mono" style="color: ${r.net_profit >= 0 ? '#10b981':'#f43f5e'}">$${r.net_profit}</td>
+              <td class="mono">${r.profit_factor}</td>
+              <td class="mono">${r.sortino_ratio || 0}</td>
+              <td class="mono">${r.win_rate}%</td>
+              <td class="mono">${r.total_trades}</td>
+            </tr>
+          `;
+        });
+      } else {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Belum ada histori tersimpan di database Backtest.</td></tr>';
+      }
+    } catch(e) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Gagal terhubung ke API Histori SQLite.</td></tr>';
+    }
+  }
+</script>
+</body>
+</html>

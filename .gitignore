@@ -1,0 +1,8 @@
+data/
+csv_raw/
+uploads/
+venv/
+__pycache__/
+*.pyc
+*.db
+*.log
