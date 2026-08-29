@@ -5,10 +5,8 @@
 # Universal AI-Driven Backtest Engine
 # Support:
 #   - CSV
-#   - Parquet
-#   - Monthly files: XAUUSD_M202401.parquet
-#   - Yearly files
-#   - OHLC: date,time,open,high,low,close
+#   - Yearly files: XAUUSD_H1_202601020100_202608280200.csv
+#   - OHLC: date,time,open,high,low,close, tickvol, vol, spread
 #   - Tick-like data: datetime,bid,ask,last
 #
 # AI membaca MQL5 -> menghasilkan trading logic
@@ -48,7 +46,7 @@ class BacktestEngine:
         Structured Trading Logic
              |
              v
-        Data Broker Parquet / CSV
+        Data Broker CSV
              |
              v
         Indicator Engine
@@ -67,19 +65,19 @@ class BacktestEngine:
 
     Dataset OHLC yang didukung:
 
-        date
-        time
-        open
-        high
-        low
-        close
+        DATE
+        TIME
+        OPEN
+        HIGH
+        LOW
+        CLOSE
+        TICKVOL
+        VOL
+        SPREAD
 
     Contoh filename:
 
-        XAUUSD_M202401.parquet
-        XAUUSD_M202402.parquet
-        ...
-        XAUUSD_M202412.parquet
+        XAUUSD_H1_202601020100_202608280200.csv
     """
 
     VERSION = "3.0.0"
@@ -529,9 +527,7 @@ class BacktestEngine:
 
         menghasilkan:
 
-            XAUUSD_M202401.parquet
-            ...
-            XAUUSD_M202412.parquet
+            XAUUSD_H1_202601020100_202608280200.csv
         """
 
         clean_symbol = self._clean_symbol(
@@ -548,9 +544,7 @@ class BacktestEngine:
         for ym in months:
 
             candidates = [
-                f"{clean_symbol}_M{ym}.parquet",
                 f"{clean_symbol}_M{ym}.csv",
-                f"{raw_symbol}_M{ym}.parquet",
                 f"{raw_symbol}_M{ym}.csv",
             ]
 
@@ -571,10 +565,6 @@ class BacktestEngine:
             for ym in months:
 
                 patterns = [
-                    os.path.join(
-                        self.tick_data_dir,
-                        f"*{clean_symbol}*{ym}*.parquet"
-                    ),
                     os.path.join(
                         self.tick_data_dir,
                         f"*{clean_symbol}*{ym}*.csv"
@@ -607,15 +597,7 @@ class BacktestEngine:
             single_file_patterns = [
                 os.path.join(
                     self.tick_data_dir,
-                    f"{clean_symbol}*.parquet"
-                ),
-                os.path.join(
-                    self.tick_data_dir,
                     f"{clean_symbol}*.csv"
-                ),
-                os.path.join(
-                    self.tick_data_dir,
-                    f"*{clean_symbol}*.parquet"
                 ),
                 os.path.join(
                     self.tick_data_dir,
@@ -635,7 +617,7 @@ class BacktestEngine:
 
                 for fname in os.listdir(self.tick_data_dir):
 
-                    if not fname.lower().endswith((".csv", ".parquet")):
+                    if not fname.lower().endswith((".csv"):
                         continue
 
                     if clean_symbol.upper() in fname.upper():
@@ -678,9 +660,7 @@ class BacktestEngine:
         )
 
         yearly_candidates = [
-            f"{clean_symbol}_{year}.parquet",
             f"{clean_symbol}_{year}.csv",
-            f"{raw_symbol}_{year}.parquet",
             f"{raw_symbol}_{year}.csv",
         ]
 
@@ -880,12 +860,7 @@ class BacktestEngine:
                 .lower()
             )
 
-            if extension == ".parquet":
-                df = pd.read_parquet(
-                    file_path
-                )
-
-            elif extension == ".csv":
+            if extension == ".csv":
 
                 try:
                     df = pd.read_csv(
@@ -901,10 +876,6 @@ class BacktestEngine:
             else:
 
                 try:
-                    df = pd.read_parquet(
-                        file_path
-                    )
-                except Exception:
 
                     df = pd.read_csv(
                         file_path
@@ -3437,10 +3408,9 @@ class BacktestEngine:
                 f"Folder data: "
                 f"{self.tick_data_dir}\n\n"
                 "File yang diharapkan contoh:\n"
-                "XAUUSD_M202401.parquet\n"
-                "XAUUSD_M202402.parquet\n"
+                "XAUUSD_H1_202601020100_202608280200.csv\n"
                 "...\n"
-                "XAUUSD_M202412.parquet"
+                "XAUUSD_H1_202601020100_202608280200.csv"
             )
 
         print(
@@ -3463,7 +3433,7 @@ class BacktestEngine:
 
             raise FileNotFoundError(
                 "\n"
-                f"File Parquet ditemukan tetapi "
+                f"File csv ditemukan tetapi "
                 f"tidak ada baris data untuk "
                 f"periode {start_date} - "
                 f"{end_date}."
