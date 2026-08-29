@@ -113,35 +113,36 @@ def health():
     }), 200
 
 
-import json
-
 @app.route('/api/bedah-logika', methods=['POST'])
 def bedah_logika():
-    data = request.get_json(force=True, silent=True) or {}
-    code = data.get('code', '').strip()
-
-    if not code:
-        return jsonify({"success": False, "message": "Kode MQL5 kosong"}), 400
-
-    prompt = f"Kamu adalah senior MQL5 developer. Bedah logika EA berikut ini secara detail, jelaskan fungsi, alur, dan risikonya:\n\n```mql5\n{code}\n```"
-
-    def generate():
-        try:
-            response = client.chat.completions.create(
-                model="gpt-5.4-nano",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=1500,
-                temperature=0.3,
-                stream=True
-            )
-            for chunk in response:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    text = chunk.choices[0].delta.content
-                    yield f"data: {json.dumps({'content': text})}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
-
-    return Response(generate(), mimetype='text/event-stream')
+    body = request.get_json(force=True, silent=True) or {}
+    mql5_code = body.get("code", "") or body.get("mql5_code", "")
+    
+    if not mql5_code or not mql5_code.strip():
+        return jsonify({
+            "success": False,
+            "message": "Kode MQL5 kosong. Harap paste kode atau upload file EA."
+        }), 400
+    
+    try:
+        # Menggunakan class AIExplainer bawaan modul Anda
+        explanation = AIExplainer.explain_ea(mql5_code)
+        
+        return jsonify({
+            "success": True,
+            "result": explanation,
+            "code_length": len(mql5_code),
+            "timestamp": datetime.now().isoformat()
+        }), 200
+        
+    except Exception as e:
+        error_trace = traceback.format_exc()
+        print(f"AI Explainer error: {error_trace}")
+        
+        return jsonify({
+            "success": False,
+            "message": f"Error menganalisis EA: {str(e)}"
+        }), 500
 
 # ============================================================
 # ROUTES - FILE UPLOAD
