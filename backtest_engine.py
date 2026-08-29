@@ -617,7 +617,7 @@ class BacktestEngine:
 
                 for fname in os.listdir(self.tick_data_dir):
 
-                    if not fname.lower().endswith((".csv"):
+                    if not fname.lower().endswith(".csv"):
                         continue
 
                     if clean_symbol.upper() in fname.upper():
