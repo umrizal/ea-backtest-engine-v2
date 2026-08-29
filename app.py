@@ -113,30 +113,35 @@ def health():
     }), 200
 
 
+import json
+
 @app.route('/api/bedah-logika', methods=['POST'])
 def bedah_logika():
-    try:
-        data = request.get_json(force=True, silent=True) or {}
-        code = data.get('code', '').strip()
+    data = request.get_json(force=True, silent=True) or {}
+    code = data.get('code', '').strip()
 
-        if not code:
-            return jsonify({"success": False, "message": "Kode MQL5 kosong"}), 400
+    if not code:
+        return jsonify({"success": False, "message": "Kode MQL5 kosong"}), 400
 
-        prompt = f"Kamu adalah senior MQL5 developer. Bedah logika EA berikut ini secara detail, jelaskan fungsi, alur, dan risiko nya:\n\n```mql5\n{code}\n```"
+    prompt = f"Kamu adalah senior MQL5 developer. Bedah logika EA berikut ini secara detail, jelaskan fungsi, alur, dan risikonya:\n\n```mql5\n{code}\n```"
 
-        response = client.chat.completions.create(
-            model="gpt-5.4-nano",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1500,
-            temperature=0.3
-        )
+    def generate():
+        try:
+            response = client.chat.completions.create(
+                model="gpt-5.4-nano",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=1500,
+                temperature=0.3,
+                stream=True
+            )
+            for chunk in response:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    text = chunk.choices[0].delta.content
+                    yield f"data: {json.dumps({'content': text})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
-        result = response.choices[0].message.content
-        return jsonify({"success": True, "result": result})
-
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
-
+    return Response(generate(), mimetype='text/event-stream')
 
 # ============================================================
 # ROUTES - FILE UPLOAD
