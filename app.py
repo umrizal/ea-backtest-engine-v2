@@ -1,4 +1,3 @@
-```python
 # ============================================================
 # app.py
 # Pintarin Laboratorium EA - Backend Flask Application
