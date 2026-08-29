@@ -812,7 +812,40 @@ def method_not_allowed(error):
         "message": "Method tidak diizinkan."
     }), 405
 
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import openai
+import os
 
+app = Flask(__name__)
+CORS(app) # penting biar gak diblok browser
+
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+@app.route('/api/bedah-logika', methods=['POST'])
+def bedah_logika():
+    try:
+        data = request.get_json()
+        code = data.get('code', '').strip()
+
+        if not code:
+            return jsonify({"success": False, "message": "Kode MQL5 kosong"}), 400
+
+        prompt = f"Kamu adalah senior MQL5 developer. Bedah logika EA berikut ini secara detail, jelaskan fungsi, alur, dan risiko nya:\n\n```mql5\n{code}\n```"
+
+        response = openai.ChatCompletion.create(
+            model="gpt-5.4-nano",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=1500,
+            temperature=0.3
+        )
+
+        result = response.choices[0].message.content
+        return jsonify({"success": True, "result": result})
+
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+    
 # ============================================================
 # MAIN ENTRY POINT
 # ============================================================
