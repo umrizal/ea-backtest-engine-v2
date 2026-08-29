@@ -593,6 +593,61 @@ class BacktestEngine:
                         sorted(found)[0]
                     )
 
+        # Fallback terakhir: satu file besar per-symbol yang TIDAK
+        # mengikuti pola penamaan bulanan/tahunan sama sekali, mis.
+        # export langsung dari MT5:
+        #
+        #   XAUUSD_H1_202601020100_202608280200.csv
+        #
+        # File seperti ini berisi seluruh rentang data dalam satu
+        # file, jadi cukup dipakai apa adanya lalu difilter per
+        # tanggal oleh _filter_by_date().
+        if not files:
+
+            single_file_patterns = [
+                os.path.join(
+                    self.tick_data_dir,
+                    f"{clean_symbol}*.parquet"
+                ),
+                os.path.join(
+                    self.tick_data_dir,
+                    f"{clean_symbol}*.csv"
+                ),
+                os.path.join(
+                    self.tick_data_dir,
+                    f"*{clean_symbol}*.parquet"
+                ),
+                os.path.join(
+                    self.tick_data_dir,
+                    f"*{clean_symbol}*.csv"
+                ),
+            ]
+
+            found = []
+
+            for pattern in single_file_patterns:
+                found.extend(glob.glob(pattern))
+
+            # Case-insensitive: glob di Linux case-sensitive, jadi
+            # coba juga pencocokan manual terhadap semua file di
+            # folder data (mis. symbol "xauusd" vs file "XAUUSD...").
+            if not found and os.path.isdir(self.tick_data_dir):
+
+                for fname in os.listdir(self.tick_data_dir):
+
+                    if not fname.lower().endswith((".csv", ".parquet")):
+                        continue
+
+                    if clean_symbol.upper() in fname.upper():
+                        found.append(
+                            os.path.join(self.tick_data_dir, fname)
+                        )
+
+            if found:
+                # Ambil semua file yang cocok symbol-nya (biasanya
+                # cuma 1 file besar) — jangan dibatasi per-bulan.
+                files.extend(sorted(dict.fromkeys(found)))
+
         return sorted(
             list(dict.fromkeys(files))
         )
@@ -994,11 +1049,25 @@ class BacktestEngine:
 
             elif c in [
                 "volume",
-                "tick_volume",
-                "real_volume",
-                "vol"
+                "vol",
+                "real_volume"
             ]:
                 rename[col] = "volume"
+
+            elif c in [
+                "tick_volume",
+                "tickvol"
+            ]:
+                # Simpan terpisah dari "volume" supaya file broker
+                # (mis. export MT5) yang punya KEDUA kolom "Tick Volume"
+                # dan "Volume" sekaligus tidak bentrok jadi satu nama
+                # kolom duplikat (yang akan meledakkan pd.to_numeric).
+                rename[col] = "tick_volume"
+
+            elif c in [
+                "spread"
+            ]:
+                rename[col] = "spread"
 
             else:
                 rename[col] = c
@@ -1006,6 +1075,14 @@ class BacktestEngine:
         df = df.rename(
             columns=rename
         )
+
+        # Jaga-jaga apabila tetap ada nama kolom duplikat (mis. dua
+        # kolom sumber berbeda kebetulan menghasilkan nama yang sama
+        # setelah normalisasi) — buang duplikat, pertahankan kolom
+        # pertama, supaya df[col] selalu mengembalikan Series (bukan
+        # DataFrame) di langkah numeric conversion berikutnya.
+        if df.columns.duplicated().any():
+            df = df.loc[:, ~df.columns.duplicated(keep="first")]
 
         # ====================================================
         # DATETIME
@@ -1088,6 +1165,8 @@ class BacktestEngine:
             "ask",
             "last",
             "volume",
+            "tick_volume",
+            "spread",
         ]
 
         for col in numeric_columns:
