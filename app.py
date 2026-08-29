@@ -822,6 +822,16 @@ CORS(app) # penting biar gak diblok browser
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from openai import OpenAI # <-- ini yg baru
+import os
+
+app = Flask(__name__)
+CORS(app)
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY")) # <-- ini yg baru
+
 @app.route('/api/bedah-logika', methods=['POST'])
 def bedah_logika():
     try:
@@ -833,14 +843,14 @@ def bedah_logika():
 
         prompt = f"Kamu adalah senior MQL5 developer. Bedah logika EA berikut ini secara detail, jelaskan fungsi, alur, dan risiko nya:\n\n```mql5\n{code}\n```"
 
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create( # <-- ini yg baru
             model="gpt-5.4-nano",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=1500,
             temperature=0.3
         )
 
-        result = response.choices[0].message.content
+        result = response.choices[0].message.content # <-- ini yg baru
         return jsonify({"success": True, "result": result})
 
     except Exception as e:
