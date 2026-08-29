@@ -963,47 +963,6 @@ def simulate_data(job_id):
 
     }), 200
 
-
-# ============================================================
-# ROUTES - AI EXPLAINER
-# ============================================================
-
-@app.route('/api/explain-ea', methods=['POST'])
-def explain_ea():
-    try:
-        data = request.json or {}
-        code = data.get('code', '')
-
-        if not code or not code.strip():
-            return jsonify({
-                "success": False,
-                "error": "Kode MQL5 / EA tidak boleh kosong."
-            }), 400
-
-        # Memanggil AI Explainer
-        result = ai_explainer.explain_ea(code)
-
-        # Perbaikan Semantik: Jika AI mengembalikan indikator error (❌ atau ⚠️)
-        if isinstance(result, str) and (result.startswith("❌") or result.startswith("⚠️")):
-            return jsonify({
-                "success": False,
-                "explanation": result,
-                "result": result,
-                "error": result
-            }), 500
-
-        return jsonify({
-            "success": True,
-            "explanation": result,
-            "result": result
-        }), 200
-
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
 # ============================================================
 # ROUTES - REPORT
 # ============================================================
