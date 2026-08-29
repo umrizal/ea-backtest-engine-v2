@@ -251,36 +251,37 @@ def health():
 def explain_ea():
     try:
         data = request.json or {}
-        # Menerima baik field 'code' maupun 'mql5_code' dari frontend
+        # Menerima baik field 'code' maupun 'mql5_code' dari payload JavaScript
         code = data.get('code') or data.get('mql5_code', '')
 
         if not code or not str(code).strip():
             return jsonify({
                 "success": False,
-                "error": "Kode MQL5 / EA tidak boleh kosong."
-            }), 400
+                "error": "Kode MQL5 / EA tidak boleh kosong.",
+                "explanation": "❌ Kode MQL5 / EA tidak boleh kosong."
+            }), 200  # Tetap kembalikan 200 agar frontend tidak mentok di catch-block
 
+        # Panggil fungsi analisis dari ai_explainer
         result = ai_explainer.explain_ea(code)
 
-        if isinstance(result, str) and (result.startswith("❌") or result.startswith("⚠️")):
-            return jsonify({
-                "success": False,
-                "explanation": result,
-                "result": result,
-                "error": result
-            }), 500
+        # Jika result mengembalikan string error (diawali ❌/⚠️), tetap kirim 200 OK dengan flag success
+        is_error = isinstance(result, str) and (result.startswith("❌") or result.startswith("⚠️"))
 
         return jsonify({
-            "success": True,
+            "success": not is_error,
             "explanation": result,
-            "result": result
+            "result": result,
+            "error": result if is_error else None
         }), 200
 
     except Exception as e:
+        error_msg = f"❌ Error server internal: {str(e)}"
         return jsonify({
             "success": False,
-            "error": str(e)
-        }), 500
+            "error": error_msg,
+            "explanation": error_msg,
+            "result": error_msg
+        }), 200
     
 # ============================================================
 # ROUTES - FILE UPLOAD
