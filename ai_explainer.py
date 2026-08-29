@@ -10,12 +10,14 @@ from openai import OpenAI
 
 API_KEY = os.getenv("FLAZ_API_KEY", "sk-P9rVt9W7B7JosCPzfIrknQ")
 BASE_URL = os.getenv("FLAZ_BASE_URL", "https://ai.flaz.id/v1")
-MODEL = os.getenv("FLAZ_MODEL", "gpt-5.4-nano")
+MODEL = os.getenv("FLAZ_MODEL", "gpt-4o-mini")  # Default ke model standar yang lebih stabil
 
-# Initialize OpenAI Client (Flaz Provider)
+# Initialize OpenAI Client (Flaz Provider) dengan Timeout 120 detik pada Client Level
 client = OpenAI(
     api_key=API_KEY,
-    base_url=BASE_URL
+    base_url=BASE_URL,
+    timeout=120.0,
+    max_retries=2
 )
 
 # ============================================================
@@ -67,7 +69,9 @@ STRUKTUR OUTPUT (WAJIB DITURUTI KONSISTEN):
 def build_prompt(mql5_code: str) -> str:
     """Membuat prompt final yang dikirim ke AI."""
     header = "=" * 60
-    return f"{header}\nSOURCE CODE MQL5:\n```mql5\n{mql5_code}\n```\n{header}\nINSTRUKSI:\nBedah kode MQL5 di atas sesuai format terstruktur. Gunakan Bahasa Indonesia yang tegas dan langsung ke intinya."
+    # Potong kode jika terlalu besar untuk mencegah OOM / Timeout ekstrem
+    truncated_code = mql5_code[:15000] if len(mql5_code) > 15000 else mql5_code
+    return f"{header}\nSOURCE CODE MQL5:\n```mql5\n{truncated_code}\n```\n{header}\nINSTRUKSI:\nBedah kode MQL5 di atas sesuai format terstruktur. Gunakan Bahasa Indonesia yang tegas dan langsung ke intinya."
 
 # ============================================================
 # EXPLAIN EA FUNCTION
@@ -86,21 +90,20 @@ def explain_ea(mql5_code: str) -> str:
                 {"role": "user", "content": build_prompt(mql5_code)}
             ],
             temperature=0.2,
-            max_tokens=1000,
-            timeout=40
+            max_tokens=1000
         )
         
         if response.choices and len(response.choices) > 0:
             return response.choices[0].message.content.strip()
         else:
-            return "⚠️ AI tidak memberikan respon. Silakan coba lagi."
+            return "❌ AI tidak memberikan respon. Silakan coba lagi."
             
     except Exception as e:
         error_msg = str(e)
         if "api_key" in error_msg.lower() or "authentication" in error_msg.lower():
             return "❌ Error autentikasi API. Periksa FLAZ_API_KEY Anda."
         elif "connection" in error_msg.lower() or "timeout" in error_msg.lower():
-            return "⚠️ Error koneksi ke AI server. Coba beberapa saat lagi."
+            return "❌ Error koneksi/timeout ke server AI Flaz."
         else:
             return f"❌ Error menganalisis EA: {error_msg}"
 
@@ -117,7 +120,6 @@ class AIExplainer:
     
     @staticmethod
     def validate_code(mql5_code: str) -> dict:
-        """Validasi sederhana keberadaan struktur dasar MQL5."""
         result = {
             "is_valid": False,
             "issues": [],

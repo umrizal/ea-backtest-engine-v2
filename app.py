@@ -247,24 +247,6 @@ def health():
 # AI EXPLAINER HEALTH CHECK
 # ============================================================
 
-@app.route("/api/ai-status", methods=["GET"])
-def ai_status():
-
-    if not AI_EXPLAINER_AVAILABLE:
-
-        return jsonify({
-            "success": False,
-            "available": False,
-            "message": "AIExplainer gagal diinisialisasi."
-        }), 503
-
-    return jsonify({
-        "success": True,
-        "available": True,
-        "message": "AI Explainer siap digunakan."
-    }), 200
-
-
 @app.route('/api/explain-ea', methods=['POST'])
 def explain_ea():
     try:
@@ -277,15 +259,15 @@ def explain_ea():
                 "error": "Kode MQL5 / EA tidak boleh kosong."
             }), 400
 
-        # Panggil AI Explainer
         result = ai_explainer.explain_ea(code)
 
-        # Cek apakah hasil analisis mengembalikan error / timeout
-        if isinstance(result, str) and (result.startswith("❌") or "Error" in result or "timed out" in result):
+        # Cek jika result berupa string error/gagal
+        if isinstance(result, str) and (result.startswith("❌") or result.startswith("⚠️")):
             return jsonify({
                 "success": False,
-                "error": result,
-                "result": result
+                "explanation": result,
+                "result": result,
+                "error": result
             }), 500
 
         return jsonify({
