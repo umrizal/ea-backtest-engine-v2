@@ -847,53 +847,76 @@ class BacktestEngine:
     # FILE READER
     # ========================================================
 
-    def _load_data_file(
-        self,
-        file_path
-    ):
-        try:
+import os
+import pandas as pd
+import numpy as np
 
-            extension = (
-                os.path.splitext(
-                    file_path
-                )[1]
-                .lower()
-            )
+def load_data(file_path: str) -> pd.DataFrame:
+    """
+    Membaca file data CSV 9-kolom MetaTrader dan melakukan normalisasi nama kolom
+    serta penggabungan kolom <DATE> dan <TIME> menjadi datetime index/column.
+    """
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File data tidak ditemukan: {file_path}")
 
-            if extension == ".csv":
+    # 1. Deteksi separator (tab atau koma/spasi)
+    # File ekspor MetaTrader biasanya menggunakan Tab atau Koma
+    try:
+        df = pd.read_csv(file_path, sep=r'\s+|\t|,', engine='python')
+    except Exception:
+        df = pd.read_csv(file_path)
 
-                try:
-                    df = pd.read_csv(
-                        file_path
-                    )
-                except Exception:
+    # 2. Clean nama kolom (hapus < > dan whitespace)
+    df.columns = [col.replace('<', '').replace('>', '').strip().lower() for col in df.columns]
 
-                    df = pd.read_csv(
-                        file_path,
-                        sep=";"
-                    )
+    # Mapping nama kolom MetaTrader -> standard engine
+    rename_map = {
+        'date': 'date',
+        'time': 'time',
+        'open': 'open',
+        'high': 'high',
+        'low': 'low',
+        'close': 'close',
+        'tickvol': 'tickvol',
+        'vol': 'volume',
+        'volume': 'volume',
+        'spread': 'spread'
+    }
+    df = df.rename(columns=rename_map)
 
-            else:
+    # 3. Gabungkan DATE dan TIME menjadi kolom datetime
+    if 'date' in df.columns and 'time' in df.columns:
+        df['datetime'] = pd.to_datetime(df['date'].astype(str) + ' ' + df['time'].astype(str), errors='coerce')
+    elif 'date' in df.columns:
+        df['datetime'] = pd.to_datetime(df['date'], errors='coerce')
 
-                try:
+    # Drop baris yang gagal di-parse tanggalnya
+    df = df.dropna(subset=['datetime'])
+    df = df.sort_values('datetime').reset_index(drop=True)
 
-                    df = pd.read_csv(
-                        file_path
-                    )
+    # 4. Pastikan tipe data numerik untuk harga
+    for col in ['open', 'high', 'low', 'close', 'tickvol', 'volume', 'spread']:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
 
-            return self._standardize_dataframe(
-                df
-            )
+    return df
 
-        except Exception as exc:
 
-            print(
-                f"[DATA] Failed reading "
-                f"{file_path}: {exc}"
-            )
-
-            return None
-
+def parse_filename_info(filename: str) -> dict:
+    """
+    Ekstrak metadata dari nama file seperti XAUUSD_H1_202601020100_202608280200.csv
+    """
+    base_name = os.path.basename(filename).replace('.csv', '')
+    parts = base_name.split('_')
+    
+    info = {
+        "symbol": parts[0] if len(parts) > 0 else "UNKNOWN",
+        "timeframe": parts[1] if len(parts) > 1 else "H1",
+        "start_str": parts[2] if len(parts) > 2 else "",
+        "end_str": parts[3] if len(parts) > 3 else ""
+    }
+    return info
+    
     # ========================================================
     # STANDARDIZE DATAFRAME
     # ========================================================
