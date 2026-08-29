@@ -1440,64 +1440,35 @@ def get_portfolio():
 # DATA FILES
 # ============================================================
 
-@app.route(
-    "/api/data-files",
-    methods=["GET"]
-)
+@app.route('/api/data-files', methods=['GET'])
 def get_data_files():
-
+    """Mengambil daftar file CSV dari folder data/"""
     try:
-
-        files = get_parquet_files_list()
-
-        symbols = {}
-
-        for f in files:
-
-            parts = (
-                f
-                .replace(".parquet", "")
-                .split("_")
-            )
-
-            symbol = (
-                parts[0]
-                if parts
-                else "UNKNOWN"
-            )
-
-            if symbol not in symbols:
-
-                symbols[symbol] = []
-
-            symbols[symbol].append(f)
-
+        data_dir = os.path.join(os.path.dirname(__file__), 'data')
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir, exist_ok=True)
+            
+        csv_files = glob.glob(os.path.join(data_dir, "*.csv"))
+        file_list = []
+        
+        for f in csv_files:
+            fname = os.path.basename(f)
+            # Ekstrak info simbol & timeframe jika sesuai format
+            file_list.append({
+                "filename": fname,
+                "path": f
+            })
+            
         return jsonify({
-
             "success": True,
-
-            "total_files": len(files),
-
-            "files": files,
-
-            "symbols": symbols,
-
-            "data_directory": TICK_DATA_DIR
-
+            "files": [f["filename"] for f in file_list],
+            "details": file_list
         }), 200
-
     except Exception as e:
-
         return jsonify({
-
             "success": False,
-
-            "message": (
-                f"Error membaca data files: {str(e)}"
-            )
-
+            "error": str(e)
         }), 500
-
 
 # ============================================================
 # ERROR HANDLERS
