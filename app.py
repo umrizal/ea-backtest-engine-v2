@@ -16,6 +16,7 @@ from portfolio_engine import PortfolioEngine
 from optimizer import GeneticOptimizer
 from ai_explainer import AIExplainer
 from report_generator import ReportGenerator
+from ea_live_simulator import LiveSimulator
 
 # ============================================================
 # CONFIGURATION
@@ -48,12 +49,22 @@ bt_engine = BacktestEngine(TICK_DATA_DIR)
 portfolio_engine = PortfolioEngine(TICK_DATA_DIR)
 optimizer = GeneticOptimizer(TICK_DATA_DIR)
 
+# Live Simulator menggunakan instance BacktestEngine yang SAMA supaya
+# AI analysis cache, symbol map, dan seluruh logic (indikator, signal,
+# TP/SL/trailing/martingale) selalu sinkron 1:1 dengan Backtest Terminal.
+live_simulator = LiveSimulator(TICK_DATA_DIR, engine=bt_engine)
+
 # ============================================================
 # JOB MANAGEMENT (In-Memory Storage)
 # ============================================================
 
 JOBS = {}
 JOBS_LOCK = threading.Lock()
+
+# Job storage terpisah untuk Live Simulator (payload lebih besar
+# karena menyimpan data per-candle untuk playback).
+SIM_JOBS = {}
+SIM_JOBS_LOCK = threading.Lock()
 
 
 # ============================================================
@@ -350,6 +361,135 @@ def backtest_cancel(job_id):
     return jsonify({
         "success": True,
         "message": "Backtest job dibatalkan."
+    }), 200
+
+
+# ============================================================
+# ROUTES - LIVE SIMULATOR (MT5 Strategy Tester "Visual Mode" style)
+# ============================================================
+
+@app.route("/api/simulate/run", methods=["POST"])
+def simulate_run():
+    """
+    Menjalankan Live Simulator: menghasilkan data candle-by-candle
+    (OHLC + indikator dinamis hasil AI Explainer + equity per-candle)
+    yang siap di-playback frame demi frame di frontend, mirip MT5
+    Strategy Tester visual mode. Menggunakan logic yang SAMA persis
+    dengan Backtest Terminal (via BacktestEngine), jadi hasil akhirnya
+    selalu konsisten.
+    """
+    body = request.get_json(force=True, silent=True) or {}
+
+    if not body.get("mql5_code"):
+        return jsonify({
+            "success": False,
+            "message": "Kode MQL5 tidak ditemukan. Harap paste kode atau upload file EA."
+        }), 400
+
+    body.setdefault("symbol", "XAUUSD")
+    body.setdefault("start_date", "2024-01-01")
+    body.setdefault("end_date", "2024-12-31")
+    body.setdefault("balance", 10000.0)
+    body.setdefault("lot", 0.1)
+    # Batasi jumlah candle default supaya payload JSON tetap ringan
+    # untuk playback di browser. Bisa dioverride dari frontend.
+    body.setdefault("max_rows", 3000)
+
+    job_id = str(uuid.uuid4())
+
+    with SIM_JOBS_LOCK:
+        SIM_JOBS[job_id] = {
+            "status": "queued",
+            "progress": 0,
+            "result": None,
+            "error": None,
+            "created_at": datetime.now().isoformat(),
+        }
+
+    def worker():
+        try:
+            with SIM_JOBS_LOCK:
+                SIM_JOBS[job_id]["status"] = "running"
+
+            def progress_cb(val):
+                with SIM_JOBS_LOCK:
+                    SIM_JOBS[job_id]["progress"] = min(100, val)
+
+            res = live_simulator.build(body, progress_callback=progress_cb)
+
+            with SIM_JOBS_LOCK:
+                SIM_JOBS[job_id]["status"] = "completed"
+                SIM_JOBS[job_id]["progress"] = 100
+                SIM_JOBS[job_id]["result"] = res
+
+        except Exception as e:
+            error_trace = traceback.format_exc()
+            print(f"Live Simulator error: {error_trace}")
+
+            with SIM_JOBS_LOCK:
+                SIM_JOBS[job_id]["status"] = "failed"
+                SIM_JOBS[job_id]["error"] = str(e)
+
+    thread = threading.Thread(target=worker)
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({
+        "success": True,
+        "message": "Live simulator job dimulai.",
+        "job_id": job_id
+    }), 200
+
+
+@app.route("/api/simulate/status/<job_id>", methods=["GET"])
+def simulate_status(job_id):
+    """
+    Cek status job Live Simulator.
+    """
+    with SIM_JOBS_LOCK:
+        j = SIM_JOBS.get(job_id)
+
+    if not j:
+        return jsonify({
+            "success": False,
+            "message": "Job ID tidak ditemukan."
+        }), 404
+
+    return jsonify({
+        "success": True,
+        "job_id": job_id,
+        "status": j["status"],
+        "progress": j["progress"],
+        "error": j.get("error")
+    }), 200
+
+
+@app.route("/api/simulate/data/<job_id>", methods=["GET"])
+def simulate_data(job_id):
+    """
+    Ambil seluruh data frame Live Simulator (candle + indikator +
+    equity per-candle) setelah job selesai, untuk di-playback di
+    frontend.
+    """
+    with SIM_JOBS_LOCK:
+        j = SIM_JOBS.get(job_id)
+
+    if not j:
+        return jsonify({
+            "success": False,
+            "message": "Job ID tidak ditemukan."
+        }), 404
+
+    if j["status"] != "completed":
+        return jsonify({
+            "success": False,
+            "message": f"Simulasi belum selesai. Status: {j['status']}"
+        }), 400
+
+    return jsonify({
+        "success": True,
+        "job_id": job_id,
+        "data": j.get("result")
     }), 200
 
 

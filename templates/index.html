@@ -14,7 +14,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: var(--bg); color: var(--text); font-family: var(--font-sans); font-size: 13px; line-height: 1.5; }
     .layout { display: flex; min-height: 100vh; }
-    .sidebar { width: 260px; background: #05070c; border-right: 1px solid var(--border); padding: 20px 14px; position: fixed; inset: 0 auto 0 0; z-index: 10; }
+    .sidebar { width: 260px; background: #05070c; border-right: 1px solid var(--border); padding: 20px 14px; position: fixed; inset: 0 auto 0 0; z-index: 10; overflow-y: auto; }
     .brand { text-align: center; margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 16px; }
     .brand h1 { font-size: 16px; font-weight: 800; color: #fff; letter-spacing: 0.1em; }
     .brand span { color: var(--gold); font-size: 10px; letter-spacing: 0.2em; display: block; margin-top: 4px; }
@@ -60,6 +60,8 @@
     .view { display: none; }
     .view.active { display: block; }
     .ai-box { background: #070c14; border: 1px solid #1e293b; padding: 12px; border-radius: 6px; color: #94a3b8; font-family: var(--font-mono); font-size: 11px; white-space: pre-line; margin-top: 10px; }
+    .sim-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+    .sim-toolbar input[type="range"] { accent-color: var(--gold); }
   </style>
 </head>
 <body>
@@ -73,6 +75,8 @@
     <div class="nav-label">Terminal Navigation</div>
     <div class="nav">
       <button class="active" id="btn-nav-backtest" onclick="switchView('backtest')">⚡ Backtest Terminal</button>
+      <button id="btn-nav-livesim" onclick="switchView('livesim')">🎬 Live Simulator (MT5 Style)</button>
+      <button id="btn-nav-fullreport" onclick="switchView('fullreport')">📑 Full Report EA</button>
       <button id="btn-nav-leaderboard" onclick="switchView('leaderboard')">🏆 EA Leaderboard</button>
     </div>
   </aside>
@@ -156,7 +160,8 @@ void OnTick() {
           </div>
 
           <button class="btn primary" id="btnRun" style="width: 100%; margin-top: 10px;" onclick="runCvmBacktest()">⚡ JALANKAN TRANSPILER & BACKTEST</button>
-          
+          <button class="btn" style="width: 100%; margin-top: 8px;" onclick="runLiveSimulation()">🎬 JALANKAN LIVE SIMULATOR (MT5 STYLE)</button>
+
           <div class="progress-bar" id="progressBar">
             <div class="progress-fill" id="progressFill"></div>
           </div>
@@ -194,6 +199,54 @@ void OnTick() {
               </table>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-livesim" class="view">
+      <div class="card">
+        <h3>🎬 Live Simulator — Playback Candle-by-Candle (Sinkron AI Explainer)</h3>
+        <div id="simMetaBox" class="ai-box">Belum ada simulasi. Isi form di "⚡ Backtest Terminal" lalu klik tombol "🎬 Jalankan Live Simulator (MT5 Style)".</div>
+
+        <div class="sim-toolbar">
+          <button class="btn" id="simPlayBtn" onclick="simTogglePlay()" disabled>▶️ Play</button>
+          <button class="btn" onclick="simRestart()" id="simRestartBtn" disabled>⏮️ Restart</button>
+          <label style="font-size:10px; color:var(--text-muted); text-transform:uppercase;">Speed</label>
+          <input type="range" id="simSpeed" min="10" max="500" value="120" style="width:120px;" oninput="simSpeedChange(this.value)">
+          <span id="simSpeedLabel" style="font-family:var(--font-mono); font-size:11px;">120ms/candle</span>
+          <input type="range" id="simSeek" min="0" max="0" value="0" style="flex:1; min-width:150px;" oninput="simSeek(this.value)">
+          <span id="simFrameLabel" style="font-family:var(--font-mono); font-size:11px;">0 / 0</span>
+        </div>
+
+        <div style="display:flex; gap:16px; align-items:center; margin-bottom:10px; flex-wrap:wrap;">
+          <span id="simStatusBadge" class="badge yellow">FLAT</span>
+          <span style="font-family:var(--font-mono); font-size:12px;">Balance: <b id="simBalance">$0</b></span>
+          <span style="font-family:var(--font-mono); font-size:12px;">Equity: <b id="simEquity">$0</b></span>
+          <span style="font-family:var(--font-mono); font-size:12px;">Trades: <b id="simTrades">0</b></span>
+          <span style="font-family:var(--font-mono); font-size:12px;">Drawdown: <b id="simDD">0%</b></span>
+        </div>
+
+        <canvas id="simCandleCanvas" width="1200" height="360" style="width:100%; background:#070c14; border:1px solid var(--border); border-radius:6px;"></canvas>
+
+        <h3 style="margin-top:18px;">📈 Equity Curve — Sumbu X: Waktu · Sumbu Y: Profit (Sinkron dengan Chart di Atas)</h3>
+        <canvas id="simEquityCanvas" height="120"></canvas>
+      </div>
+    </div>
+
+    <div id="view-fullreport" class="view">
+      <div class="card">
+        <h3>📑 Full Report — MT5 Style Analysis Matrix</h3>
+        <div style="display:flex; gap:10px; align-items:flex-end; margin-bottom:14px; flex-wrap:wrap;">
+          <div class="form-group" style="flex:1; min-width:220px; margin-bottom:0;">
+            <label>Pilih Job dari Histori</label>
+            <select id="reportJobSelect"><option value="">-- Memuat histori --</option></select>
+          </div>
+          <button class="btn primary" onclick="loadFullReport()">📄 Tampilkan Report</button>
+          <button class="btn" onclick="loadFullReport(currentJobId)">⚡ Report Backtest Terakhir</button>
+          <button class="btn blue" onclick="openMT5Report()">🖨️ Buka HTML Report MT5</button>
+        </div>
+        <div id="fullReportBox">
+          <p style="color: var(--text-muted); text-align:center;">Pilih job dari histori atau jalankan backtest untuk melihat matriks analisa lengkap.</p>
         </div>
       </div>
     </div>
@@ -241,6 +294,9 @@ void OnTick() {
     
     if (viewName === 'leaderboard') {
       fetchHistoryData();
+    }
+    if (viewName === 'fullreport') {
+      populateReportJobSelect();
     }
   }
 
@@ -311,17 +367,12 @@ void OnTick() {
     }
   }
 
-  async function runCvmBacktest() {
-    const btnRun = document.getElementById('btnRun');
-    const pBar = document.getElementById('progressBar');
-    const pFill = document.getElementById('progressFill');
-    const statusText = document.getElementById('statusText');
-
+  function buildBacktestPayload() {
     const startDateVal = document.getElementById('startDate').value;
     const endDateVal = document.getElementById('endDate').value;
     const yearVal = startDateVal ? startDateVal.split('-')[0] : "2024";
 
-    const payload = {
+    return {
       ea_name: document.getElementById('eaName').value,
       symbol: document.getElementById('symbolInput').value,
       year: yearVal,
@@ -331,6 +382,15 @@ void OnTick() {
       lot: parseFloat(document.getElementById('lot').value),
       mql5_code: document.getElementById('mql5CodeInput').value
     };
+  }
+
+  async function runCvmBacktest() {
+    const btnRun = document.getElementById('btnRun');
+    const pBar = document.getElementById('progressBar');
+    const pFill = document.getElementById('progressFill');
+    const statusText = document.getElementById('statusText');
+
+    const payload = buildBacktestPayload();
 
     try {
       btnRun.disabled = true;
@@ -420,6 +480,8 @@ void OnTick() {
   function openMT5Report() {
     if (currentJobId) {
       window.open(`${API_BASE}/api/report/${currentJobId}`, '_blank');
+    } else {
+      alert('Belum ada backtest yang selesai dijalankan.');
     }
   }
 
@@ -509,6 +571,370 @@ void OnTick() {
     } catch(e) {
       tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Gagal terhubung ke API Histori SQLite.</td></tr>';
     }
+  }
+
+  // ============================================================
+  // LIVE SIMULATOR (MT5 Strategy Tester "Visual Mode" style)
+  // Adaptasi dari script mplfinance/animation user: strategi &
+  // indikator TIDAK di-hardcode ke EMA — mengikuti hasil AI
+  // Explainer (backend: ea_live_simulator.py + backtest_engine.py)
+  // ============================================================
+
+  let simData = null;
+  let simFrameIdx = 0;
+  let simPlaying = false;
+  let simTimer = null;
+  let simSpeedMs = 120;
+  let simEquityChart = null;
+
+  async function runLiveSimulation() {
+    const payload = buildBacktestPayload();
+    if (!payload.mql5_code || !payload.mql5_code.trim()) {
+      alert("Harap tempelkan kode MQL5 (.mq5) terlebih dahulu.");
+      return;
+    }
+
+    switchView('livesim');
+    resetSimState();
+    const box = document.getElementById('simMetaBox');
+    box.innerText = '⏳ Menjalankan Live Simulator — AI menganalisis strategi & indikator dari kode MQL5...';
+
+    try {
+      const res = await fetch(`${API_BASE}/api/simulate/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!data.success) {
+        box.innerText = '❌ ' + data.message;
+        return;
+      }
+      pollSimStatus(data.job_id);
+    } catch (e) {
+      box.innerText = '⚠️ Gagal terhubung ke server Live Simulator.';
+    }
+  }
+
+  function pollSimStatus(jobId) {
+    const box = document.getElementById('simMetaBox');
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/simulate/status/${jobId}`);
+        const data = await res.json();
+        if (!data.success) { clearInterval(timer); return; }
+
+        box.innerText = `⏳ Memproses simulasi: ${data.progress}% (menghitung indikator & signal sesuai strategi terdeteksi AI Explainer)`;
+
+        if (data.status === 'completed') {
+          clearInterval(timer);
+          loadSimData(jobId);
+        } else if (data.status === 'failed') {
+          clearInterval(timer);
+          box.innerText = '❌ Simulasi gagal: ' + (data.error || 'Terjadi kesalahan sistem');
+        }
+      } catch (e) {
+        clearInterval(timer);
+        box.innerText = '⚠️ Koneksi ke server terputus.';
+      }
+    }, 800);
+  }
+
+  async function loadSimData(jobId) {
+    const res = await fetch(`${API_BASE}/api/simulate/data/${jobId}`);
+    const data = await res.json();
+    if (!data.success) return;
+
+    simData = data.data;
+    simFrameIdx = 0;
+
+    const m = simData.meta;
+    document.getElementById('simMetaBox').innerText =
+      `EA: ${m.ea_name}  |  Symbol: ${m.symbol}  |  Strategi Terdeteksi AI: ${m.strategy_type}\n` +
+      `Indikator: ${(m.indicators || []).join(', ') || '-'}\n` +
+      `Overlay Chart: ${(m.overlay_labels || []).join(', ') || '-'}\n` +
+      `Total Candle: ${m.total_frames}  |  Total Trade: ${m.total_trades}  |  Max DD: ${m.max_drawdown_pct}%`;
+
+    document.getElementById('simPlayBtn').disabled = false;
+    document.getElementById('simRestartBtn').disabled = false;
+
+    const seek = document.getElementById('simSeek');
+    seek.max = Math.max(0, simData.frames.length - 1);
+    seek.value = 0;
+
+    initSimEquityChart();
+    renderSimFrame(0);
+  }
+
+  function resetSimState() {
+    simData = null;
+    simFrameIdx = 0;
+    simPlaying = false;
+    if (simTimer) clearInterval(simTimer);
+    document.getElementById('simPlayBtn').innerText = '▶️ Play';
+    document.getElementById('simPlayBtn').disabled = true;
+    document.getElementById('simRestartBtn').disabled = true;
+    document.getElementById('simFrameLabel').innerText = '0 / 0';
+    const ctx = document.getElementById('simCandleCanvas').getContext('2d');
+    ctx.clearRect(0, 0, 1200, 360);
+  }
+
+  function simTogglePlay() {
+    if (!simData) return;
+    simPlaying = !simPlaying;
+    document.getElementById('simPlayBtn').innerText = simPlaying ? '⏸️ Pause' : '▶️ Play';
+
+    if (simPlaying) {
+      simTimer = setInterval(() => {
+        if (simFrameIdx >= simData.frames.length - 1) {
+          simPlaying = false;
+          document.getElementById('simPlayBtn').innerText = '▶️ Play';
+          clearInterval(simTimer);
+          return;
+        }
+        simFrameIdx++;
+        renderSimFrame(simFrameIdx);
+      }, simSpeedMs);
+    } else {
+      clearInterval(simTimer);
+    }
+  }
+
+  function simRestart() {
+    if (!simData) return;
+    simFrameIdx = 0;
+    simPlaying = false;
+    clearInterval(simTimer);
+    document.getElementById('simPlayBtn').innerText = '▶️ Play';
+    renderSimFrame(0);
+  }
+
+  function simSpeedChange(val) {
+    simSpeedMs = parseInt(val);
+    document.getElementById('simSpeedLabel').innerText = simSpeedMs + 'ms/candle';
+    if (simPlaying) {
+      clearInterval(simTimer);
+      simPlaying = false;
+      simTogglePlay();
+    }
+  }
+
+  function simSeek(val) {
+    simFrameIdx = parseInt(val);
+    if (simData) renderSimFrame(simFrameIdx);
+  }
+
+  function initSimEquityChart() {
+    const ctx = document.getElementById('simEquityCanvas').getContext('2d');
+    if (simEquityChart) simEquityChart.destroy();
+    simEquityChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Equity ($)',
+          data: [],
+          borderColor: '#d9a75c',
+          borderWidth: 2,
+          fill: false,
+          pointRadius: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        animation: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { display: false },
+          y: { grid: { color: '#1a2436' } }
+        }
+      }
+    });
+  }
+
+  function renderSimFrame(idx) {
+    if (!simData) return;
+    const frames = simData.frames;
+    const f = frames[idx];
+
+    document.getElementById('simFrameLabel').innerText = `${idx + 1} / ${frames.length}`;
+    document.getElementById('simSeek').value = idx;
+    document.getElementById('simBalance').innerText = '$' + f.balance;
+    document.getElementById('simEquity').innerText = '$' + f.equity;
+    document.getElementById('simTrades').innerText = f.trades_total;
+    document.getElementById('simDD').innerText = f.drawdown + '%';
+
+    const badge = document.getElementById('simStatusBadge');
+    if (f.position === 'BUY') { badge.className = 'badge green'; badge.innerText = 'LONG'; }
+    else if (f.position === 'SELL') { badge.className = 'badge red'; badge.innerText = 'SHORT'; }
+    else { badge.className = 'badge yellow'; badge.innerText = 'FLAT'; }
+
+    // Candlestick + overlay indikator (window bergerak, sinkron waktu)
+    const WINDOW = 100;
+    const start = Math.max(0, idx - WINDOW);
+    drawCandles(frames.slice(start, idx + 1));
+
+    // Equity curve — sumbu X waktu, sumbu Y profit, sinkron dg chart di atas
+    const eqSlice = frames.slice(0, idx + 1);
+    simEquityChart.data.labels = eqSlice.map(x => x.t);
+    simEquityChart.data.datasets[0].data = eqSlice.map(x => x.equity);
+    simEquityChart.update('none');
+  }
+
+  function drawCandles(slice) {
+    const canvas = document.getElementById('simCandleCanvas');
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    if (!slice.length) return;
+
+    let lo = Math.min(...slice.map(c => c.l));
+    let hi = Math.max(...slice.map(c => c.h));
+
+    const overlayVals = slice.flatMap(c => Object.values(c.overlays || {}).filter(v => v !== null && v !== undefined));
+    if (overlayVals.length) {
+      lo = Math.min(lo, ...overlayVals);
+      hi = Math.max(hi, ...overlayVals);
+    }
+
+    const pad = (hi - lo) * 0.08 || 1;
+    lo -= pad; hi += pad;
+
+    const cw = w / slice.length;
+    const yOf = (p) => h - ((p - lo) / (hi - lo)) * h;
+
+    slice.forEach((c, i) => {
+      const x = i * cw + cw / 2;
+      const up = c.c >= c.o;
+      ctx.strokeStyle = ctx.fillStyle = up ? '#10b981' : '#f43f5e';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, yOf(c.h));
+      ctx.lineTo(x, yOf(c.l));
+      ctx.stroke();
+
+      const bodyTop = yOf(Math.max(c.o, c.c));
+      const bodyH = Math.max(1, Math.abs(yOf(c.o) - yOf(c.c)));
+      ctx.fillRect(x - cw * 0.35, bodyTop, cw * 0.7, bodyH);
+
+      if (c.opened) {
+        ctx.fillStyle = c.opened.direction === 'BUY' ? '#10b981' : '#f43f5e';
+        ctx.beginPath();
+        ctx.arc(x, yOf(c.opened.price), 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+
+    // Overlay garis indikator — dinamis mengikuti strategi terdeteksi AI
+    // (MA crossover, Bollinger Bands, Alligator, dst — bukan hardcode EMA)
+    const colors = ['#3b82f6', '#f59e0b', '#a855f7'];
+    const labels = (simData.meta.overlay_labels || []);
+    labels.forEach((label, li) => {
+      ctx.strokeStyle = colors[li % colors.length];
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      let started = false;
+      slice.forEach((c, i) => {
+        const v = c.overlays ? c.overlays[label] : null;
+        if (v === null || v === undefined) return;
+        const x = i * cw + cw / 2;
+        const y = yOf(v);
+        if (!started) { ctx.moveTo(x, y); started = true; } else { ctx.lineTo(x, y); }
+      });
+      ctx.stroke();
+    });
+  }
+
+  // ============================================================
+  // FULL REPORT — MT5 style analysis matrix per EA
+  // ============================================================
+
+  async function populateReportJobSelect() {
+    const sel = document.getElementById('reportJobSelect');
+    try {
+      const res = await fetch(`${API_BASE}/api/history`);
+      const data = await res.json();
+      sel.innerHTML = '<option value="">-- Pilih Job --</option>';
+      if (data.success) {
+        data.history.forEach(r => {
+          const opt = document.createElement('option');
+          opt.value = r.job_id;
+          opt.innerText = `${r.ea_name} | ${r.symbol} | ${r.year} | $${r.net_profit}`;
+          sel.appendChild(opt);
+        });
+      }
+    } catch (e) { /* diamkan, biarkan user pakai "Report Backtest Terakhir" */ }
+  }
+
+  async function loadFullReport(jobIdOverride) {
+    const sel = document.getElementById('reportJobSelect');
+    const jobId = jobIdOverride || sel.value;
+    const box = document.getElementById('fullReportBox');
+
+    if (!jobId) {
+      box.innerHTML = '<p style="color: var(--red);">Pilih job terlebih dahulu, atau jalankan backtest baru.</p>';
+      return;
+    }
+
+    box.innerHTML = '<p style="color: var(--text-muted);">⏳ Memuat matriks analisa lengkap...</p>';
+
+    try {
+      const res = await fetch(`${API_BASE}/api/backtest-result/${jobId}`);
+      const data = await res.json();
+
+      if (data.success && data.data) {
+        renderFullReportMetrics(data.data, jobId);
+        return;
+      }
+
+      // Fallback: cari di histori database (job lama, tidak lagi in-memory)
+      const res2 = await fetch(`${API_BASE}/api/history/${jobId}`);
+      const data2 = await res2.json();
+      if (data2.success && data2.data) {
+        renderFullReportMetrics(data2.data, jobId);
+      } else {
+        box.innerHTML = '<p style="color: var(--red);">Report tidak ditemukan untuk job ini.</p>';
+      }
+    } catch (e) {
+      box.innerHTML = '<p style="color: var(--red);">Gagal memuat report dari server.</p>';
+    }
+  }
+
+  function renderFullReportMetrics(m, jobId) {
+    const box = document.getElementById('fullReportBox');
+    const skip = ['trades', 'equity_curve', 'params', 'ai_logic', 'data_files'];
+
+    let rows = '';
+    Object.keys(m).sort().forEach(key => {
+      if (skip.includes(key)) return;
+      let val = m[key];
+      if (val === null || val === undefined) val = '-';
+      if (typeof val === 'object') val = JSON.stringify(val);
+      rows += `<tr>
+        <td style="color:var(--text-muted); font-size:10px; font-weight:700; text-transform:uppercase;">${String(key).replace(/_/g, ' ')}</td>
+        <td class="mono">${val}</td>
+      </tr>`;
+    });
+
+    let logicHtml = '';
+    if (m.ai_logic) {
+      const logic = m.ai_logic;
+      logicHtml = `<div class="ai-box" style="margin-top:14px;">` +
+        `Strategi Terdeteksi AI : ${logic.strategy_type || '-'}\n` +
+        `Indikator              : ${(logic.indicators || []).join(', ') || '-'}\n` +
+        `Exit Rules (TP/SL/dll) : ${logic.exit_rules ? JSON.stringify(logic.exit_rules) : '-'}\n` +
+        `Lot Management         : ${logic.lot_management ? JSON.stringify(logic.lot_management) : '-'}\n` +
+        `Risk Management        : ${logic.risk_management ? JSON.stringify(logic.risk_management) : '-'}` +
+        `</div>`;
+    }
+
+    box.innerHTML = `
+      <div style="margin-bottom:10px; font-family: var(--font-mono); font-size:11px; color: var(--text-muted);">Job ID: ${jobId}</div>
+      <div class="table-wrap" style="max-height:520px;">
+        <table><tbody>${rows}</tbody></table>
+      </div>
+      ${logicHtml}
+    `;
   }
 </script>
 </body>
