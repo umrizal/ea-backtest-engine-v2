@@ -1,5 +1,8 @@
+```python
+# ============================================================
 # app.py
 # Pintarin Laboratorium EA - Backend Flask Application
+# ============================================================
 
 import os
 import uuid
@@ -7,9 +10,16 @@ import threading
 import traceback
 import time
 from datetime import datetime
-from flask import Flask, request, jsonify, render_template, Response, send_from_directory
+
+from flask import (
+    Flask,
+    request,
+    jsonify,
+    render_template,
+    Response,
+    send_from_directory
+)
 from flask_cors import CORS
-from openai import OpenAI
 
 from database import DatabaseManager
 from backtest_engine import BacktestEngine
@@ -17,50 +27,124 @@ from portfolio_engine import PortfolioEngine
 from optimizer import GeneticOptimizer
 from ai_explainer import AIExplainer
 from report_generator import ReportGenerator
-from ea_live_simulator import LiveSimulator
+
+# Live Simulator
+try:
+    from ea_live_simulator import LiveSimulator
+    LIVE_SIMULATOR_AVAILABLE = True
+except Exception as e:
+    print(f"[WARNING] LiveSimulator tidak tersedia: {e}")
+    LiveSimulator = None
+    LIVE_SIMULATOR_AVAILABLE = False
+
 
 # ============================================================
 # CONFIGURATION
 # ============================================================
 
 APP_PORT = int(os.environ.get("PORT", 5001))
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-TICK_DATA_DIR = os.environ.get("TICK_DATA_DIR", os.path.join(BASE_DIR, "data"))
+
+TICK_DATA_DIR = os.environ.get(
+    "TICK_DATA_DIR",
+    os.path.join(BASE_DIR, "data")
+)
+
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 
-# Create directories
+
+# ============================================================
+# CREATE DIRECTORIES
+# ============================================================
+
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(TICK_DATA_DIR, exist_ok=True)
 os.makedirs(TEMPLATES_DIR, exist_ok=True)
+
 
 # ============================================================
 # FLASK APP INITIALIZATION
 # ============================================================
 
-app = Flask(__name__, template_folder=TEMPLATES_DIR)
+app = Flask(
+    __name__,
+    template_folder=TEMPLATES_DIR
+)
+
 CORS(app)
 
-# Inisialisasi OpenAI Client dengan API Key default/fallback
-flaz_api_key = os.getenv("FLAZ_API_KEY", "sk-P9rVt9W7B7JosCPzfIrknQ")
-
-client = OpenAI(
-    api_key=flaz_api_key,
-    base_url=os.getenv("FLAZ_BASE_URL", "https://ai.flaz.id/v1")
-)
 
 # ============================================================
 # INITIALIZE ENGINES
 # ============================================================
 
+print("[INIT] Initializing DatabaseManager...")
 db = DatabaseManager()
+
+print("[INIT] Initializing BacktestEngine...")
 bt_engine = BacktestEngine(TICK_DATA_DIR)
+
+print("[INIT] Initializing PortfolioEngine...")
 portfolio_engine = PortfolioEngine(TICK_DATA_DIR)
+
+print("[INIT] Initializing GeneticOptimizer...")
 optimizer = GeneticOptimizer(TICK_DATA_DIR)
-live_simulator = LiveSimulator(TICK_DATA_DIR, engine=bt_engine)
+
 
 # ============================================================
-# JOB MANAGEMENT (In-Memory Storage)
+# AI EXPLAINER
+#
+# IMPORTANT:
+# AIExplainer digunakan sebagai INSTANCE.
+# Jangan gunakan:
+#
+#     AIExplainer.explain_ea(...)
+#
+# Gunakan:
+#
+#     ai_explainer.explain_ea(...)
+# ============================================================
+
+print("[INIT] Initializing AIExplainer...")
+
+try:
+    ai_explainer = AIExplainer()
+    AI_EXPLAINER_AVAILABLE = True
+    print("[INIT] AIExplainer initialized successfully.")
+except Exception as e:
+    ai_explainer = None
+    AI_EXPLAINER_AVAILABLE = False
+    print(f"[ERROR] AIExplainer initialization failed: {e}")
+    traceback.print_exc()
+
+
+# ============================================================
+# LIVE SIMULATOR
+# ============================================================
+
+if LIVE_SIMULATOR_AVAILABLE:
+    try:
+        live_simulator = LiveSimulator(
+            TICK_DATA_DIR,
+            engine=bt_engine
+        )
+
+        print("[INIT] LiveSimulator initialized successfully.")
+
+    except Exception as e:
+        live_simulator = None
+        LIVE_SIMULATOR_AVAILABLE = False
+
+        print(f"[ERROR] LiveSimulator initialization failed: {e}")
+        traceback.print_exc()
+else:
+    live_simulator = None
+
+
+# ============================================================
+# JOB MANAGEMENT
 # ============================================================
 
 JOBS = {}
@@ -75,76 +159,212 @@ SIM_JOBS_LOCK = threading.Lock()
 # ============================================================
 
 def get_parquet_files_count():
+    """Menghitung jumlah file parquet di directory data."""
+
     try:
-        files = [f for f in os.listdir(TICK_DATA_DIR) if f.endswith(".parquet")]
+        files = [
+            f
+            for f in os.listdir(TICK_DATA_DIR)
+            if f.endswith(".parquet")
+        ]
+
         return len(files)
+
     except Exception:
         return 0
 
 
 def get_parquet_files_list():
+    """Mengambil daftar file parquet di directory data."""
+
     try:
-        files = [f for f in os.listdir(TICK_DATA_DIR) if f.endswith(".parquet")]
+        files = [
+            f
+            for f in os.listdir(TICK_DATA_DIR)
+            if f.endswith(".parquet")
+        ]
+
         return sorted(files)
+
     except Exception:
         return []
 
 
+def get_ai_status():
+    """
+    Mendapatkan status AI Explainer.
+    """
+
+    return {
+        "available": AI_EXPLAINER_AVAILABLE,
+        "initialized": ai_explainer is not None
+    }
+
+
 # ============================================================
-# ROUTES - MAIN PAGES & BEDAH LOGIKA
+# MAIN PAGE
 # ============================================================
 
 @app.route("/")
 def index():
+    """Render halaman utama."""
+
     return render_template("index.html")
 
+
+# ============================================================
+# HEALTH CHECK
+# ============================================================
 
 @app.route("/health")
 @app.route("/api/health")
 def health():
+
     parquet_count = get_parquet_files_count()
     parquet_files = get_parquet_files_list()
-    
+
     return jsonify({
         "success": True,
         "status": "running",
+
         "port": APP_PORT,
+
         "parquet_files_found": parquet_count,
+
         "parquet_files": parquet_files[:10],
+
+        "ai_explainer": get_ai_status(),
+
+        "live_simulator": {
+            "available": LIVE_SIMULATOR_AVAILABLE,
+            "initialized": live_simulator is not None
+        },
+
         "timestamp": datetime.now().isoformat()
     }), 200
 
 
-@app.route('/api/bedah-logika', methods=['POST'])
-def bedah_logika():
-    body = request.get_json(force=True, silent=True) or {}
-    mql5_code = body.get("code", "") or body.get("mql5_code", "")
-    
-    if not mql5_code or not mql5_code.strip():
+# ============================================================
+# AI EXPLAINER HEALTH CHECK
+# ============================================================
+
+@app.route("/api/ai-status", methods=["GET"])
+def ai_status():
+
+    if not AI_EXPLAINER_AVAILABLE:
+
         return jsonify({
             "success": False,
-            "message": "Kode MQL5 kosong. Harap paste kode atau upload file EA."
+            "available": False,
+            "message": "AIExplainer gagal diinisialisasi."
+        }), 503
+
+    return jsonify({
+        "success": True,
+        "available": True,
+        "message": "AI Explainer siap digunakan."
+    }), 200
+
+
+# ============================================================
+# ROUTES - BEDAH LOGIKA
+# ============================================================
+
+@app.route("/api/bedah-logika", methods=["POST"])
+def bedah_logika():
+
+    body = request.get_json(
+        force=True,
+        silent=True
+    ) or {}
+
+    # Support dua nama field
+    mql5_code = (
+        body.get("code", "")
+        or body.get("mql5_code", "")
+    )
+
+    # ========================================================
+    # VALIDATION
+    # ========================================================
+
+    if not isinstance(mql5_code, str):
+        mql5_code = str(mql5_code)
+
+    if not mql5_code.strip():
+
+        return jsonify({
+            "success": False,
+            "message": (
+                "Kode MQL5 kosong. "
+                "Harap paste kode atau upload file EA."
+            )
         }), 400
-    
+
+    # ========================================================
+    # CHECK AI
+    # ========================================================
+
+    if not AI_EXPLAINER_AVAILABLE or ai_explainer is None:
+
+        return jsonify({
+            "success": False,
+            "message": "AI Explainer belum berhasil diinisialisasi."
+        }), 503
+
+    # ========================================================
+    # RUN AI
+    # ========================================================
+
     try:
-        # Menggunakan class AIExplainer bawaan modul Anda
-        explanation = AIExplainer.explain_ea(mql5_code)
-        
+
+        print(
+            f"[AI] Bedah Logika request diterima. "
+            f"Code length: {len(mql5_code)}"
+        )
+
+        # IMPORTANT:
+        # Gunakan instance, bukan class.
+        explanation = ai_explainer.explain_ea(
+            mql5_code
+        )
+
+        print("[AI] Bedah Logika berhasil.")
+
         return jsonify({
             "success": True,
+
             "result": explanation,
+
+            # Alias supaya frontend lama/baru sama-sama bisa
+            # menggunakan response.
+            "explanation": explanation,
+
             "code_length": len(mql5_code),
+
             "timestamp": datetime.now().isoformat()
         }), 200
-        
+
     except Exception as e:
+
         error_trace = traceback.format_exc()
-        print(f"AI Explainer error: {error_trace}")
-        
+
+        print("=" * 70)
+        print("[AI ERROR] Bedah Logika gagal")
+        print("=" * 70)
+        print(error_trace)
+        print("=" * 70)
+
         return jsonify({
             "success": False,
-            "message": f"Error menganalisis EA: {str(e)}"
+
+            "message": (
+                f"Error menganalisis EA: {str(e)}"
+            ),
+
+            "error_type": type(e).__name__
         }), 500
+
 
 # ============================================================
 # ROUTES - FILE UPLOAD
@@ -152,51 +372,113 @@ def bedah_logika():
 
 @app.route("/api/upload-ea", methods=["POST"])
 def upload_ea():
+
     if "file" not in request.files:
+
         return jsonify({
             "success": False,
             "message": "File tidak ditemukan dalam request."
         }), 400
-    
+
     file = request.files["file"]
-    
+
     if not file or file.filename == "":
+
         return jsonify({
             "success": False,
             "message": "File kosong atau tidak valid."
         }), 400
-    
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    timestamp = datetime.now().strftime(
+        "%Y%m%d_%H%M%S"
+    )
+
     unique_id = str(uuid.uuid4())[:6]
-    safe_filename = f"{timestamp}_{unique_id}_{file.filename}"
-    save_path = os.path.join(UPLOAD_DIR, safe_filename)
-    
+
+    safe_filename = (
+        f"{timestamp}_{unique_id}_{file.filename}"
+    )
+
+    save_path = os.path.join(
+        UPLOAD_DIR,
+        safe_filename
+    )
+
+    # ========================================================
+    # SAVE FILE
+    # ========================================================
+
     try:
+
         file.save(save_path)
+
     except Exception as e:
+
         return jsonify({
             "success": False,
-            "message": f"Gagal menyimpan file: {str(e)}"
+            "message": (
+                f"Gagal menyimpan file: {str(e)}"
+            )
         }), 500
-    
-    ea_name = os.path.splitext(file.filename)[0]
-    
+
+    # ========================================================
+    # EA NAME
+    # ========================================================
+
+    ea_name = os.path.splitext(
+        file.filename
+    )[0]
+
+    # ========================================================
+    # READ MQL CODE
+    # ========================================================
+
     mql5_code = ""
-    if file.filename.endswith(".mq5") or file.filename.endswith(".mq4"):
+
+    filename_lower = file.filename.lower()
+
+    if filename_lower.endswith(".mq5") or \
+       filename_lower.endswith(".mq4"):
+
         try:
-            with open(save_path, "r", encoding="utf-8", errors="ignore") as f:
+
+            with open(
+                save_path,
+                "r",
+                encoding="utf-8",
+                errors="ignore"
+            ) as f:
+
                 mql5_code = f.read()
+
         except Exception as e:
-            print(f"File read error: {e}")
+
+            print(
+                f"[UPLOAD] File read error: {e}"
+            )
+
             mql5_code = ""
-    
+
+    # ========================================================
+    # RESPONSE
+    # ========================================================
+
     return jsonify({
+
         "success": True,
+
         "message": "File EA berhasil diupload.",
+
         "ea_name": ea_name,
+
         "mql5_code": mql5_code,
+
         "file_path": save_path,
-        "file_size": os.path.getsize(save_path)
+
+        "file_size": os.path.getsize(
+            save_path
+        )
+
     }), 200
 
 
@@ -206,386 +488,1176 @@ def upload_ea():
 
 @app.route("/api/run-backtest", methods=["POST"])
 def run_backtest():
-    body = request.get_json(force=True, silent=True) or {}
-    
+
+    body = request.get_json(
+        force=True,
+        silent=True
+    ) or {}
+
+    # ========================================================
+    # VALIDATION
+    # ========================================================
+
     if not body.get("mql5_code"):
+
         return jsonify({
             "success": False,
-            "message": "Kode MQL5 tidak ditemukan. Harap paste kode atau upload file EA."
+            "message": (
+                "Kode MQL5 tidak ditemukan. "
+                "Harap paste kode atau upload file EA."
+            )
         }), 400
-    
-    body.setdefault("symbol", "XAUUSD")
-    body.setdefault("start_date", "2024-01-01")
-    body.setdefault("end_date", "2024-12-31")
-    body.setdefault("balance", 10000.0)
-    body.setdefault("lot", 0.1)
-    
+
+    # ========================================================
+    # DEFAULT PARAMS
+    # ========================================================
+
+    body.setdefault(
+        "symbol",
+        "XAUUSD"
+    )
+
+    body.setdefault(
+        "start_date",
+        "2024-01-01"
+    )
+
+    body.setdefault(
+        "end_date",
+        "2024-12-31"
+    )
+
+    body.setdefault(
+        "balance",
+        10000.0
+    )
+
+    body.setdefault(
+        "lot",
+        0.1
+    )
+
+    # ========================================================
+    # JOB ID
+    # ========================================================
+
     job_id = str(uuid.uuid4())
-    
+
     with JOBS_LOCK:
+
         JOBS[job_id] = {
+
             "status": "queued",
+
             "progress": 0,
+
             "params": body,
+
             "result": None,
+
             "error": None,
+
             "created_at": datetime.now().isoformat(),
+
             "started_at": None,
+
             "completed_at": None
         }
-    
+
+    # ========================================================
+    # BACKGROUND WORKER
+    # ========================================================
+
     def worker():
+
         try:
+
             with JOBS_LOCK:
+
                 JOBS[job_id]["status"] = "running"
+
                 JOBS[job_id]["progress"] = 10
-                JOBS[job_id]["started_at"] = datetime.now().isoformat()
-            
+
+                JOBS[job_id]["started_at"] = (
+                    datetime.now().isoformat()
+                )
+
+            # ------------------------------------------------
+            # PROGRESS CALLBACK
+            # ------------------------------------------------
+
             def progress_cb(val):
+
                 with JOBS_LOCK:
-                    JOBS[job_id]["progress"] = min(100, val)
-            
-            res = bt_engine.run(body, progress_callback=progress_cb)
-            
+
+                    JOBS[job_id]["progress"] = min(
+                        100,
+                        val
+                    )
+
+            # ------------------------------------------------
+            # RUN BACKTEST
+            # ------------------------------------------------
+
+            print(
+                f"[BACKTEST] Starting job {job_id}"
+            )
+
+            res = bt_engine.run(
+                body,
+                progress_callback=progress_cb
+            )
+
+            # ------------------------------------------------
+            # SAVE DATABASE
+            # ------------------------------------------------
+
             try:
-                db.save_run(job_id, body, res)
+
+                db.save_run(
+                    job_id,
+                    body,
+                    res
+                )
+
             except Exception as db_err:
-                print(f"Database save error: {db_err}")
-            
+
+                print(
+                    f"[DATABASE] Save error: {db_err}"
+                )
+
+            # ------------------------------------------------
+            # COMPLETE
+            # ------------------------------------------------
+
             with JOBS_LOCK:
+
                 JOBS[job_id]["status"] = "completed"
+
                 JOBS[job_id]["progress"] = 100
+
                 JOBS[job_id]["result"] = res
-                JOBS[job_id]["completed_at"] = datetime.now().isoformat()
-                
+
+                JOBS[job_id]["completed_at"] = (
+                    datetime.now().isoformat()
+                )
+
+            print(
+                f"[BACKTEST] Job {job_id} completed"
+            )
+
         except Exception as e:
+
             error_trace = traceback.format_exc()
-            print(f"Backtest error: {error_trace}")
-            
+
+            print("=" * 70)
+            print(f"[BACKTEST ERROR] Job {job_id}")
+            print("=" * 70)
+            print(error_trace)
+            print("=" * 70)
+
             with JOBS_LOCK:
+
                 JOBS[job_id]["status"] = "failed"
+
                 JOBS[job_id]["error"] = str(e)
-                JOBS[job_id]["error_trace"] = error_trace
-                JOBS[job_id]["completed_at"] = datetime.now().isoformat()
-    
-    thread = threading.Thread(target=worker)
-    thread.daemon = True
+
+                JOBS[job_id]["error_trace"] = (
+                    error_trace
+                )
+
+                JOBS[job_id]["completed_at"] = (
+                    datetime.now().isoformat()
+                )
+
+    thread = threading.Thread(
+        target=worker,
+        daemon=True
+    )
+
     thread.start()
-    
+
     return jsonify({
+
         "success": True,
+
         "message": "Backtest job dimulai.",
+
         "job_id": job_id,
+
         "estimated_time": "30-60 detik"
+
     }), 200
 
 
-@app.route("/api/backtest-status/<job_id>", methods=["GET"])
+# ============================================================
+# BACKTEST STATUS
+# ============================================================
+
+@app.route(
+    "/api/backtest-status/<job_id>",
+    methods=["GET"]
+)
 def backtest_status(job_id):
+
     with JOBS_LOCK:
+
         j = JOBS.get(job_id)
-    
+
     if not j:
-        return jsonify({"success": False, "message": "Job ID tidak ditemukan."}), 404
-    
+
+        return jsonify({
+            "success": False,
+            "message": "Job ID tidak ditemukan."
+        }), 404
+
     return jsonify({
+
         "success": True,
+
         "job_id": job_id,
+
         "status": j["status"],
+
         "progress": j["progress"],
+
         "error": j.get("error"),
+
         "created_at": j.get("created_at"),
+
         "started_at": j.get("started_at"),
+
         "completed_at": j.get("completed_at")
+
     }), 200
 
 
-@app.route("/api/backtest-result/<job_id>", methods=["GET"])
+# ============================================================
+# BACKTEST RESULT
+# ============================================================
+
+@app.route(
+    "/api/backtest-result/<job_id>",
+    methods=["GET"]
+)
 def backtest_result(job_id):
+
     with JOBS_LOCK:
+
         j = JOBS.get(job_id)
-    
+
     if not j:
-        return jsonify({"success": False, "message": "Job ID tidak ditemukan."}), 404
-    
+
+        return jsonify({
+            "success": False,
+            "message": "Job ID tidak ditemukan."
+        }), 404
+
     if j["status"] != "completed":
-        return jsonify({"success": False, "message": f"Backtest belum selesai. Status: {j['status']}"}), 400
-    
+
+        return jsonify({
+            "success": False,
+            "message": (
+                f"Backtest belum selesai. "
+                f"Status: {j['status']}"
+            )
+        }), 400
+
     return jsonify({
+
         "success": True,
+
         "job_id": job_id,
+
         "data": j.get("result"),
+
         "params": j.get("params")
+
     }), 200
 
 
-@app.route("/api/backtest-cancel/<job_id>", methods=["POST"])
+# ============================================================
+# BACKTEST CANCEL
+# ============================================================
+
+@app.route(
+    "/api/backtest-cancel/<job_id>",
+    methods=["POST"]
+)
 def backtest_cancel(job_id):
+
     with JOBS_LOCK:
+
         j = JOBS.get(job_id)
-    
+
     if not j:
-        return jsonify({"success": False, "message": "Job ID tidak ditemukan."}), 404
-    
-    if j["status"] in ["completed", "failed"]:
-        return jsonify({"success": False, "message": f"Job sudah selesai dengan status: {j['status']}"}), 400
-    
+
+        return jsonify({
+            "success": False,
+            "message": "Job ID tidak ditemukan."
+        }), 404
+
+    if j["status"] in [
+        "completed",
+        "failed",
+        "cancelled"
+    ]:
+
+        return jsonify({
+            "success": False,
+            "message": (
+                f"Job sudah selesai dengan status: "
+                f"{j['status']}"
+            )
+        }), 400
+
     with JOBS_LOCK:
+
         JOBS[job_id]["status"] = "cancelled"
+
         JOBS[job_id]["progress"] = 0
-    
-    return jsonify({"success": True, "message": "Backtest job dibatalkan."}), 200
+
+    return jsonify({
+
+        "success": True,
+
+        "message": "Backtest job dibatalkan."
+
+    }), 200
 
 
 # ============================================================
 # ROUTES - LIVE SIMULATOR
 # ============================================================
 
-@app.route("/api/simulate/run", methods=["POST"])
+@app.route(
+    "/api/simulate/run",
+    methods=["POST"]
+)
 def simulate_run():
-    body = request.get_json(force=True, silent=True) or {}
+
+    if not LIVE_SIMULATOR_AVAILABLE or \
+       live_simulator is None:
+
+        return jsonify({
+            "success": False,
+            "message": "Live Simulator tidak tersedia."
+        }), 503
+
+    body = request.get_json(
+        force=True,
+        silent=True
+    ) or {}
 
     if not body.get("mql5_code"):
-        return jsonify({"success": False, "message": "Kode MQL5 tidak ditemukan."}), 400
 
-    body.setdefault("symbol", "XAUUSD")
-    body.setdefault("start_date", "2024-01-01")
-    body.setdefault("end_date", "2024-12-31")
-    body.setdefault("balance", 10000.0)
-    body.setdefault("lot", 0.1)
-    body.setdefault("max_rows", 3000)
+        return jsonify({
+            "success": False,
+            "message": "Kode MQL5 tidak ditemukan."
+        }), 400
+
+    body.setdefault(
+        "symbol",
+        "XAUUSD"
+    )
+
+    body.setdefault(
+        "start_date",
+        "2024-01-01"
+    )
+
+    body.setdefault(
+        "end_date",
+        "2024-12-31"
+    )
+
+    body.setdefault(
+        "balance",
+        10000.0
+    )
+
+    body.setdefault(
+        "lot",
+        0.1
+    )
+
+    body.setdefault(
+        "max_rows",
+        3000
+    )
 
     job_id = str(uuid.uuid4())
 
     with SIM_JOBS_LOCK:
+
         SIM_JOBS[job_id] = {
+
             "status": "queued",
+
             "progress": 0,
+
+            "params": body,
+
             "result": None,
+
             "error": None,
-            "created_at": datetime.now().isoformat(),
+
+            "created_at": datetime.now().isoformat()
         }
 
     def worker():
+
         try:
+
             with SIM_JOBS_LOCK:
+
                 SIM_JOBS[job_id]["status"] = "running"
 
             def progress_cb(val):
-                with SIM_JOBS_LOCK:
-                    SIM_JOBS[job_id]["progress"] = min(100, val)
 
-            res = live_simulator.build(body, progress_callback=progress_cb)
+                with SIM_JOBS_LOCK:
+
+                    SIM_JOBS[job_id]["progress"] = min(
+                        100,
+                        val
+                    )
+
+            res = live_simulator.build(
+                body,
+                progress_callback=progress_cb
+            )
 
             with SIM_JOBS_LOCK:
+
                 SIM_JOBS[job_id]["status"] = "completed"
+
                 SIM_JOBS[job_id]["progress"] = 100
+
                 SIM_JOBS[job_id]["result"] = res
 
         except Exception as e:
+
             error_trace = traceback.format_exc()
-            print(f"Live Simulator error: {error_trace}")
+
+            print(
+                f"[LIVE SIMULATOR ERROR]\n"
+                f"{error_trace}"
+            )
 
             with SIM_JOBS_LOCK:
+
                 SIM_JOBS[job_id]["status"] = "failed"
+
                 SIM_JOBS[job_id]["error"] = str(e)
 
-    thread = threading.Thread(target=worker)
-    thread.daemon = True
+    thread = threading.Thread(
+        target=worker,
+        daemon=True
+    )
+
     thread.start()
 
-    return jsonify({"success": True, "message": "Live simulator job dimulai.", "job_id": job_id}), 200
-
-
-@app.route("/api/simulate/status/<job_id>", methods=["GET"])
-def simulate_status(job_id):
-    with SIM_JOBS_LOCK:
-        j = SIM_JOBS.get(job_id)
-
-    if not j:
-        return jsonify({"success": False, "message": "Job ID tidak ditemukan."}), 404
-
     return jsonify({
+
         "success": True,
-        "job_id": job_id,
-        "status": j["status"],
-        "progress": j["progress"],
-        "error": j.get("error")
+
+        "message": (
+            "Live simulator job dimulai."
+        ),
+
+        "job_id": job_id
+
     }), 200
 
 
-@app.route("/api/simulate/data/<job_id>", methods=["GET"])
-def simulate_data(job_id):
+# ============================================================
+# LIVE SIMULATOR STATUS
+# ============================================================
+
+@app.route(
+    "/api/simulate/status/<job_id>",
+    methods=["GET"]
+)
+def simulate_status(job_id):
+
     with SIM_JOBS_LOCK:
+
         j = SIM_JOBS.get(job_id)
 
     if not j:
-        return jsonify({"success": False, "message": "Job ID tidak ditemukan."}), 404
+
+        return jsonify({
+            "success": False,
+            "message": "Job ID tidak ditemukan."
+        }), 404
+
+    return jsonify({
+
+        "success": True,
+
+        "job_id": job_id,
+
+        "status": j["status"],
+
+        "progress": j["progress"],
+
+        "error": j.get("error")
+
+    }), 200
+
+
+# ============================================================
+# LIVE SIMULATOR DATA
+# ============================================================
+
+@app.route(
+    "/api/simulate/data/<job_id>",
+    methods=["GET"]
+)
+def simulate_data(job_id):
+
+    with SIM_JOBS_LOCK:
+
+        j = SIM_JOBS.get(job_id)
+
+    if not j:
+
+        return jsonify({
+            "success": False,
+            "message": "Job ID tidak ditemukan."
+        }), 404
 
     if j["status"] != "completed":
-        return jsonify({"success": False, "message": f"Simulasi belum selesai. Status: {j['status']}"}), 400
 
-    return jsonify({"success": True, "job_id": job_id, "data": j.get("result")}), 200
+        return jsonify({
+            "success": False,
+            "message": (
+                f"Simulasi belum selesai. "
+                f"Status: {j['status']}"
+            )
+        }), 400
+
+    return jsonify({
+
+        "success": True,
+
+        "job_id": job_id,
+
+        "data": j.get("result")
+
+    }), 200
 
 
 # ============================================================
-# ROUTES - AI EXPLAINER & REPORT
+# ROUTES - AI EXPLAINER
 # ============================================================
 
-@app.route("/api/explain-ea", methods=["POST"])
+@app.route(
+    "/api/explain-ea",
+    methods=["POST"]
+)
 def explain_ea():
-    body = request.get_json(force=True, silent=True) or {}
-    mql5_code = body.get("mql5_code", "")
-    
-    if not mql5_code or not mql5_code.strip():
-        return jsonify({"success": False, "message": "Kode MQL5 kosong."}), 400
-    
-    try:
-        explanation = AIExplainer.explain_ea(mql5_code)
+
+    body = request.get_json(
+        force=True,
+        silent=True
+    ) or {}
+
+    mql5_code = body.get(
+        "mql5_code",
+        ""
+    )
+
+    # ========================================================
+    # VALIDATION
+    # ========================================================
+
+    if not isinstance(mql5_code, str):
+
+        mql5_code = str(mql5_code)
+
+    if not mql5_code.strip():
+
         return jsonify({
+
+            "success": False,
+
+            "message": (
+                "Kode MQL5 kosong."
+            )
+
+        }), 400
+
+    # ========================================================
+    # AI AVAILABILITY
+    # ========================================================
+
+    if not AI_EXPLAINER_AVAILABLE or \
+       ai_explainer is None:
+
+        return jsonify({
+
+            "success": False,
+
+            "message": (
+                "AI Explainer belum berhasil "
+                "diinisialisasi."
+            )
+
+        }), 503
+
+    # ========================================================
+    # RUN AI
+    # ========================================================
+
+    try:
+
+        print(
+            f"[AI] Explain EA request. "
+            f"Code length={len(mql5_code)}"
+        )
+
+        # ====================================================
+        # IMPORTANT FIX
+        # ====================================================
+
+        explanation = ai_explainer.explain_ea(
+            mql5_code
+        )
+
+        print("[AI] Explain EA berhasil.")
+
+        return jsonify({
+
             "success": True,
+
             "explanation": explanation,
+
+            # Alias untuk compatibility
+            "result": explanation,
+
             "code_length": len(mql5_code),
+
             "timestamp": datetime.now().isoformat()
+
         }), 200
+
     except Exception as e:
-        return jsonify({"success": False, "message": f"Error menganalisis EA: {str(e)}"}), 500
+
+        error_trace = traceback.format_exc()
+
+        print("=" * 70)
+        print("[AI EXPLAINER ERROR]")
+        print("=" * 70)
+        print(error_trace)
+        print("=" * 70)
+
+        return jsonify({
+
+            "success": False,
+
+            "message": (
+                f"Error menganalisis EA: {str(e)}"
+            ),
+
+            "error_type": type(e).__name__
+
+        }), 500
 
 
-@app.route("/api/report/<job_id>", methods=["GET"])
+# ============================================================
+# ROUTES - REPORT
+# ============================================================
+
+@app.route(
+    "/api/report/<job_id>",
+    methods=["GET"]
+)
 def get_report(job_id):
+
     with JOBS_LOCK:
+
         j = JOBS.get(job_id)
-    
+
     if not j or not j.get("result"):
-        return jsonify({"success": False, "message": "Report tidak ditemukan."}), 404
-    
+
+        return jsonify({
+
+            "success": False,
+
+            "message": (
+                "Report tidak ditemukan. "
+                "Pastikan backtest sudah selesai."
+            )
+
+        }), 404
+
     try:
-        html_content = ReportGenerator.generate_html_report(job_id, j["result"], j.get("params", {}))
-        return Response(html_content, mimetype="text/html")
+
+        html_content = (
+            ReportGenerator.generate_html_report(
+                job_id,
+                j["result"],
+                j.get("params", {})
+            )
+        )
+
+        return Response(
+            html_content,
+            mimetype="text/html"
+        )
+
     except Exception as e:
-        return jsonify({"success": False, "message": f"Error generating report: {str(e)}"}), 500
+
+        return jsonify({
+
+            "success": False,
+
+            "message": (
+                f"Error generating report: {str(e)}"
+            )
+
+        }), 500
 
 
-@app.route("/api/report/<job_id>/download", methods=["GET"])
+# ============================================================
+# DOWNLOAD REPORT
+# ============================================================
+
+@app.route(
+    "/api/report/<job_id>/download",
+    methods=["GET"]
+)
 def download_report(job_id):
+
     with JOBS_LOCK:
+
         j = JOBS.get(job_id)
-    
+
     if not j or not j.get("result"):
-        return jsonify({"success": False, "message": "Report tidak ditemukan."}), 404
-    
+
+        return jsonify({
+
+            "success": False,
+
+            "message": "Report tidak ditemukan."
+
+        }), 404
+
     try:
-        html_content = ReportGenerator.generate_html_report(job_id, j["result"], j.get("params", {}))
-        report_filename = f"report_{job_id[:8]}.html"
-        report_path = os.path.join(UPLOAD_DIR, report_filename)
-        
-        with open(report_path, "w", encoding="utf-8") as f:
+
+        html_content = (
+            ReportGenerator.generate_html_report(
+                job_id,
+                j["result"],
+                j.get("params", {})
+            )
+        )
+
+        report_filename = (
+            f"report_{job_id[:8]}.html"
+        )
+
+        report_path = os.path.join(
+            UPLOAD_DIR,
+            report_filename
+        )
+
+        with open(
+            report_path,
+            "w",
+            encoding="utf-8"
+        ) as f:
+
             f.write(html_content)
-        
-        return send_from_directory(UPLOAD_DIR, report_filename, as_attachment=True)
+
+        return send_from_directory(
+            UPLOAD_DIR,
+            report_filename,
+            as_attachment=True
+        )
+
     except Exception as e:
-        return jsonify({"success": False, "message": f"Error downloading report: {str(e)}"}), 500
+
+        return jsonify({
+
+            "success": False,
+
+            "message": (
+                f"Error downloading report: {str(e)}"
+            )
+
+        }), 500
 
 
 # ============================================================
-# ROUTES - HISTORY & PORTFOLIO & DATA FILES
+# HISTORY
 # ============================================================
 
-@app.route("/api/history", methods=["GET"])
+@app.route(
+    "/api/history",
+    methods=["GET"]
+)
 def get_history():
-    limit = request.args.get("limit", 50, type=int)
+
+    limit = request.args.get(
+        "limit",
+        50,
+        type=int
+    )
+
     try:
-        history = db.get_history(limit=limit)
-        return jsonify({"success": True, "history": history, "count": len(history), "limit": limit}), 200
+
+        history = db.get_history(
+            limit=limit
+        )
+
+        return jsonify({
+
+            "success": True,
+
+            "history": history,
+
+            "count": len(history),
+
+            "limit": limit
+
+        }), 200
+
     except Exception as e:
-        return jsonify({"success": False, "message": f"Error mengambil histori: {str(e)}"}), 500
+
+        return jsonify({
+
+            "success": False,
+
+            "message": (
+                f"Error mengambil histori: {str(e)}"
+            )
+
+        }), 500
 
 
-@app.route("/api/history/<job_id>", methods=["GET"])
+# ============================================================
+# HISTORY DETAIL
+# ============================================================
+
+@app.route(
+    "/api/history/<job_id>",
+    methods=["GET"]
+)
 def get_history_detail(job_id):
+
     try:
+
         with JOBS_LOCK:
+
             j = JOBS.get(job_id)
-        
+
         if j and j.get("result"):
-            return jsonify({"success": True, "data": j["result"], "params": j.get("params"), "from_cache": True}), 200
-        
-        history = db.get_history(limit=1000)
-        for record in history:
-            if record.get("job_id") == job_id:
-                return jsonify({"success": True, "data": record, "from_cache": False}), 200
-        
-        return jsonify({"success": False, "message": "Job ID tidak ditemukan."}), 404
-    except Exception as e:
-        return jsonify({"success": False, "message": f"Error mengambil detail: {str(e)}"}), 500
 
-
-@app.route("/api/history/clear", methods=["POST"])
-def clear_history():
-    try:
-        with JOBS_LOCK:
-            JOBS.clear()
-        return jsonify({"success": True, "message": "Histori backtest berhasil dihapus."}), 200
-    except Exception as e:
-        return jsonify({"success": False, "message": f"Error menghapus histori: {str(e)}"}), 500
-
-
-@app.route("/api/portfolio", methods=["GET"])
-def get_portfolio():
-    try:
-        history = db.get_history(limit=1000)
-        if not history:
             return jsonify({
+
                 "success": True,
-                "portfolio": {"total_runs": 0, "total_profit": 0, "avg_profit": 0, "win_rate": 0, "best_ea": None, "worst_ea": None}
+
+                "data": j["result"],
+
+                "params": j.get("params"),
+
+                "from_cache": True
+
             }), 200
-        
-        total_runs = len(history)
-        total_profit = sum(r.get("net_profit", 0) for r in history)
-        avg_profit = total_profit / total_runs if total_runs > 0 else 0
-        winning_runs = [r for r in history if r.get("net_profit", 0) > 0]
-        win_rate = (len(winning_runs) / total_runs * 100) if total_runs > 0 else 0
-        
-        best_ea = max(history, key=lambda x: x.get("net_profit", 0)) if history else None
-        worst_ea = min(history, key=lambda x: x.get("net_profit", 0)) if history else None
-        
+
+        history = db.get_history(
+            limit=1000
+        )
+
+        for record in history:
+
+            if record.get("job_id") == job_id:
+
+                return jsonify({
+
+                    "success": True,
+
+                    "data": record,
+
+                    "from_cache": False
+
+                }), 200
+
         return jsonify({
-            "success": True,
-            "portfolio": {
-                "total_runs": total_runs,
-                "total_profit": round(total_profit, 2),
-                "avg_profit": round(avg_profit, 2),
-                "win_rate": round(win_rate, 2),
-                "best_ea": {"name": best_ea.get("ea_name") if best_ea else None, "profit": best_ea.get("net_profit") if best_ea else 0},
-                "worst_ea": {"name": worst_ea.get("ea_name") if worst_ea else None, "profit": worst_ea.get("net_profit") if worst_ea else 0}
-            }
-        }), 200
+
+            "success": False,
+
+            "message": (
+                "Job ID tidak ditemukan di database."
+            )
+
+        }), 404
+
     except Exception as e:
-        return jsonify({"success": False, "message": f"Error menghitung portfolio: {str(e)}"}), 500
+
+        return jsonify({
+
+            "success": False,
+
+            "message": (
+                f"Error mengambil detail: {str(e)}"
+            )
+
+        }), 500
 
 
-@app.route("/api/data-files", methods=["GET"])
-def get_data_files():
+# ============================================================
+# CLEAR HISTORY
+# ============================================================
+
+@app.route(
+    "/api/history/clear",
+    methods=["POST"]
+)
+def clear_history():
+
     try:
-        files = get_parquet_files_list()
-        symbols = {}
-        for f in files:
-            parts = f.replace(".parquet", "").split("_")
-            symbol = parts[0] if parts else "UNKNOWN"
-            if symbol not in symbols:
-                symbols[symbol] = []
-            symbols[symbol].append(f)
-        
+
+        with JOBS_LOCK:
+
+            JOBS.clear()
+
         return jsonify({
+
             "success": True,
-            "total_files": len(files),
-            "files": files,
-            "symbols": symbols,
-            "data_directory": TICK_DATA_DIR
+
+            "message": (
+                "Histori backtest berhasil dihapus."
+            )
+
         }), 200
+
     except Exception as e:
-        return jsonify({"success": False, "message": f"Error membaca data files: {str(e)}"}), 500
+
+        return jsonify({
+
+            "success": False,
+
+            "message": (
+                f"Error menghapus histori: {str(e)}"
+            )
+
+        }), 500
+
+
+# ============================================================
+# PORTFOLIO
+# ============================================================
+
+@app.route(
+    "/api/portfolio",
+    methods=["GET"]
+)
+def get_portfolio():
+
+    try:
+
+        history = db.get_history(
+            limit=1000
+        )
+
+        if not history:
+
+            return jsonify({
+
+                "success": True,
+
+                "portfolio": {
+
+                    "total_runs": 0,
+
+                    "total_profit": 0,
+
+                    "avg_profit": 0,
+
+                    "win_rate": 0,
+
+                    "best_ea": None,
+
+                    "worst_ea": None
+
+                }
+
+            }), 200
+
+        total_runs = len(history)
+
+        total_profit = sum(
+            r.get("net_profit", 0)
+            for r in history
+        )
+
+        avg_profit = (
+            total_profit / total_runs
+            if total_runs > 0
+            else 0
+        )
+
+        winning_runs = [
+
+            r for r in history
+
+            if r.get("net_profit", 0) > 0
+        ]
+
+        win_rate = (
+
+            len(winning_runs)
+            / total_runs
+            * 100
+
+            if total_runs > 0
+            else 0
+        )
+
+        best_ea = max(
+            history,
+            key=lambda x: x.get(
+                "net_profit",
+                0
+            )
+        )
+
+        worst_ea = min(
+            history,
+            key=lambda x: x.get(
+                "net_profit",
+                0
+            )
+        )
+
+        return jsonify({
+
+            "success": True,
+
+            "portfolio": {
+
+                "total_runs": total_runs,
+
+                "total_profit": round(
+                    total_profit,
+                    2
+                ),
+
+                "avg_profit": round(
+                    avg_profit,
+                    2
+                ),
+
+                "win_rate": round(
+                    win_rate,
+                    2
+                ),
+
+                "best_ea": {
+
+                    "name": best_ea.get(
+                        "ea_name"
+                    ),
+
+                    "profit": best_ea.get(
+                        "net_profit"
+                    )
+
+                },
+
+                "worst_ea": {
+
+                    "name": worst_ea.get(
+                        "ea_name"
+                    ),
+
+                    "profit": worst_ea.get(
+                        "net_profit"
+                    )
+
+                }
+
+            }
+
+        }), 200
+
+    except Exception as e:
+
+        return jsonify({
+
+            "success": False,
+
+            "message": (
+                f"Error menghitung portfolio: {str(e)}"
+            )
+
+        }), 500
+
+
+# ============================================================
+# DATA FILES
+# ============================================================
+
+@app.route(
+    "/api/data-files",
+    methods=["GET"]
+)
+def get_data_files():
+
+    try:
+
+        files = get_parquet_files_list()
+
+        symbols = {}
+
+        for f in files:
+
+            parts = (
+                f
+                .replace(".parquet", "")
+                .split("_")
+            )
+
+            symbol = (
+                parts[0]
+                if parts
+                else "UNKNOWN"
+            )
+
+            if symbol not in symbols:
+
+                symbols[symbol] = []
+
+            symbols[symbol].append(f)
+
+        return jsonify({
+
+            "success": True,
+
+            "total_files": len(files),
+
+            "files": files,
+
+            "symbols": symbols,
+
+            "data_directory": TICK_DATA_DIR
+
+        }), 200
+
+    except Exception as e:
+
+        return jsonify({
+
+            "success": False,
+
+            "message": (
+                f"Error membaca data files: {str(e)}"
+            )
+
+        }), 500
 
 
 # ============================================================
@@ -594,15 +1666,44 @@ def get_data_files():
 
 @app.errorhandler(404)
 def not_found(error):
-    return jsonify({"success": False, "message": "Endpoint tidak ditemukan."}), 404
+
+    return jsonify({
+
+        "success": False,
+
+        "message": (
+            "Endpoint tidak ditemukan."
+        )
+
+    }), 404
+
 
 @app.errorhandler(500)
 def internal_error(error):
-    return jsonify({"success": False, "message": "Error internal server."}), 500
+
+    return jsonify({
+
+        "success": False,
+
+        "message": (
+            "Error internal server."
+        )
+
+    }), 500
+
 
 @app.errorhandler(405)
 def method_not_allowed(error):
-    return jsonify({"success": False, "message": "Method tidak diizinkan."}), 405
+
+    return jsonify({
+
+        "success": False,
+
+        "message": (
+            "Method tidak diizinkan."
+        )
+
+    }), 405
 
 
 # ============================================================
@@ -610,21 +1711,62 @@ def method_not_allowed(error):
 # ============================================================
 
 if __name__ == "__main__":
-    print("=" * 60)
-    print("PINTARIN LABORATORIUM EA - BACKEND SERVER")
-    print("=" * 60)
-    print(f"Port: {APP_PORT}")
-    print(f"Data Directory: {TICK_DATA_DIR}")
-    print(f"Upload Directory: {UPLOAD_DIR}")
-    print(f"Templates Directory: {TEMPLATES_DIR}")
-    print(f"Parquet Files Found: {get_parquet_files_count()}")
-    print("=" * 60)
-    print("Starting Flask server...")
-    print("=" * 60)
-    
+
+    print("=" * 70)
+
+    print(
+        "PINTARIN LABORATORIUM EA - BACKEND SERVER"
+    )
+
+    print("=" * 70)
+
+    print(
+        f"Port: {APP_PORT}"
+    )
+
+    print(
+        f"Data Directory: {TICK_DATA_DIR}"
+    )
+
+    print(
+        f"Upload Directory: {UPLOAD_DIR}"
+    )
+
+    print(
+        f"Templates Directory: {TEMPLATES_DIR}"
+    )
+
+    print(
+        f"Parquet Files Found: "
+        f"{get_parquet_files_count()}"
+    )
+
+    print(
+        f"AI Explainer: "
+        f"{'READY' if AI_EXPLAINER_AVAILABLE else 'ERROR'}"
+    )
+
+    print(
+        f"Live Simulator: "
+        f"{'READY' if LIVE_SIMULATOR_AVAILABLE else 'ERROR'}"
+    )
+
+    print("=" * 70)
+
+    print(
+        "Starting Flask server..."
+    )
+
+    print("=" * 70)
+
     app.run(
+
         host="0.0.0.0",
+
         port=APP_PORT,
+
         debug=False,
+
         threaded=True
     )
+```
