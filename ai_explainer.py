@@ -71,12 +71,10 @@ STRUKTUR OUTPUT (WAJIB DITURUTI KONSISTEN):
 # PROMPT BUILDER
 # ============================================================
 
-def build_prompt(mql5_code: str) -> str:
-    """Membuat prompt final yang dikirim ke AI."""
+def build_prompt(mql5_code: str, file_name: str = "EA_Model") -> str:
     header = "=" * 60
-    # Batasi kode maksimal 15.000 karakter agar mencegah timeout
     truncated_code = mql5_code[:15000] if len(mql5_code) > 15000 else mql5_code
-    return f"{header}\nSOURCE CODE MQL5:\n```mql5\n{truncated_code}\n```\n{header}\nINSTRUKSI:\nBedah kode MQL5 di atas sesuai format terstruktur. Cari bug dan berikan saran perbaikan kodingan secara spesifik. Gunakan Bahasa Indonesia yang tegas dan langsung ke intinya."
+    return f"{header}\nNAMA FILE / EA: {file_name}\nSOURCE CODE MQL5:\n```mql5\n{truncated_code}\n```\n{header}\nINSTRUKSI:\nBedah kode MQL5 di atas. Cantumkan nama EA yang terdeteksi di judul Ringkasan EA."
 
 # ============================================================
 # EXPLAIN EA FUNCTION

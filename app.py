@@ -251,20 +251,17 @@ def health():
 def explain_ea():
     try:
         data = request.json or {}
-        # Menerima baik field 'code' maupun 'mql5_code' dari payload JavaScript
         code = data.get('code') or data.get('mql5_code', '')
+        file_name = data.get('file_name', 'Expert Advisor')
 
         if not code or not str(code).strip():
             return jsonify({
                 "success": False,
                 "error": "Kode MQL5 / EA tidak boleh kosong.",
                 "explanation": "❌ Kode MQL5 / EA tidak boleh kosong."
-            }), 200  # Tetap kembalikan 200 agar frontend tidak mentok di catch-block
+            }), 200
 
-        # Panggil fungsi analisis dari ai_explainer
         result = ai_explainer.explain_ea(code)
-
-        # Jika result mengembalikan string error (diawali ❌/⚠️), tetap kirim 200 OK dengan flag success
         is_error = isinstance(result, str) and (result.startswith("❌") or result.startswith("⚠️"))
 
         return jsonify({
@@ -273,15 +270,8 @@ def explain_ea():
             "result": result,
             "error": result if is_error else None
         }), 200
-
     except Exception as e:
-        error_msg = f"❌ Error server internal: {str(e)}"
-        return jsonify({
-            "success": False,
-            "error": error_msg,
-            "explanation": error_msg,
-            "result": error_msg
-        }), 200
+        return jsonify({"success": False, "error": str(e)}), 200
     
 # ============================================================
 # ROUTES - FILE UPLOAD
@@ -1400,35 +1390,56 @@ def get_portfolio():
 # DATA FILES
 # ============================================================
 
+import os
+import glob
+from datetime import datetime
+
 @app.route('/api/data-files', methods=['GET'])
 def get_data_files():
-    """Mengambil daftar file CSV dari folder data/"""
     try:
         data_dir = os.path.join(os.path.dirname(__file__), 'data')
-        if not os.path.exists(data_dir):
-            os.makedirs(data_dir, exist_ok=True)
-            
         csv_files = glob.glob(os.path.join(data_dir, "*.csv"))
-        file_list = []
-        
+        file_details = []
+
         for f in csv_files:
             fname = os.path.basename(f)
-            # Ekstrak info simbol & timeframe jika sesuai format
-            file_list.append({
+            # Default values jika nama file tidak sesuai format
+            symbol = "XAUUSD"
+            timeframe = "H1"
+            start_date = "2026-01-02"
+            end_date = "2026-08-28"
+
+            # Parse format nama: SYMBOL_TIMEFRAME_START_END.csv
+            parts = fname.replace('.csv', '').split('_')
+            if len(parts) >= 4:
+                symbol = parts[0]
+                timeframe = parts[1]
+                
+                # Format 202601020100 -> 2026-01-02
+                try:
+                    s_dt = datetime.strptime(parts[2][:8], "%Y%m%d")
+                    e_dt = datetime.strptime(parts[3][:8], "%Y%m%d")
+                    start_date = s_dt.strftime("%Y-%m-%d")
+                    end_date = e_dt.strftime("%Y-%m-%d")
+                except Exception:
+                    pass
+
+            file_details.append({
                 "filename": fname,
-                "path": f
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "start_date": start_date,
+                "end_date": end_date
             })
-            
+
         return jsonify({
             "success": True,
-            "files": [f["filename"] for f in file_list],
-            "details": file_list
+            "files": [f["filename"] for f in file_details],
+            "details": file_details,
+            "default": file_details[0] if file_details else None
         }), 200
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 # ============================================================
 # ERROR HANDLERS
