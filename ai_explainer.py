@@ -10,9 +10,9 @@ from openai import OpenAI
 
 API_KEY = os.getenv("FLAZ_API_KEY", "sk-P9rVt9W7B7JosCPzfIrknQ")
 BASE_URL = os.getenv("FLAZ_BASE_URL", "https://ai.flaz.id/v1")
-MODEL = os.getenv("FLAZ_MODEL", "gpt-4o-mini")  # Default ke model standar yang lebih stabil
+MODEL = os.getenv("FLAZ_MODEL", "gpt-4o-mini")
 
-# Initialize OpenAI Client (Flaz Provider) dengan Timeout 120 detik pada Client Level
+# Inisialisasi OpenAI Client dengan timeout 120 detik
 client = OpenAI(
     api_key=API_KEY,
     base_url=BASE_URL,
@@ -25,13 +25,13 @@ client = OpenAI(
 # ============================================================
 
 SYSTEM_PROMPT = """
-Anda adalah AI Expert MQL5. Tugas Anda adalah membedah EA secara SINGKAT, PADAT, dan RAPI.
+Anda adalah AI Expert MQL5. Tugas Anda adalah membedah EA secara SINGKAT, PADAT, dan RAPI, serta MENEMUKAN BUG atau potensi masalah teknis pada kodenya.
 
 ATURAN FORMATTING & GAYA BAHASA:
 - Hindari paragraf panjang. Wajib gunakan poin-poin singkat (bullet points).
 - Gunakan ikon visual emoji di setiap poin utama agar mudah dibaca sekilas.
 - Minimalkan penggunaan tanda koma dan kalimat berbelit-belit. Langsung ke intinya.
-- Jangan berhalusinasi. Jika fitur tidak ada di kode, tulis "❌ Tidak ada".
+- Jangan berhalusinasi. Jika fitur atau bug tidak ada di kode, tulis "❌ Tidak ditemukan".
 
 STRUKTUR OUTPUT (WAJIB DITURUTI KONSISTEN):
 
@@ -51,6 +51,11 @@ STRUKTUR OUTPUT (WAJIB DITURUTI KONSISTEN):
 • 🔴 Sinyal SELL  : [Syarat singkat eksekusi jual]
 • 🚪 Exit Rule    : [Syarat TP/SL/Close Signal/Basket Close]
 
+🐛 TEMUAN BUG & SARAN PERBAIKAN
+• 🔴 Bug Logika/Sintaks : [Jelaskan lokasi/fungsi bug MQL5, atau ❌ Tidak ditemukan]
+• ⚠️ Potensi Error Run  : [Masalah eksekusi, misal: Unhandled Return Value, Off-by-one loop, Slippage, Margin Call, atau Array Out of Range]
+• 🛠️ Saran Perbaikan    : [1-2 langkah konkret perbaikan kodingan untuk memperbaiki bug tersebut]
+
 ⚠️ RISIKO UTAMA
 • 💥 [Risiko 1, misal: Exposure Martingale/Grid tinggi saat trending]
 • ⚠️ [Risiko 2, misal: Tanpa Hard Stop Loss / rawan margin call]
@@ -69,16 +74,16 @@ STRUKTUR OUTPUT (WAJIB DITURUTI KONSISTEN):
 def build_prompt(mql5_code: str) -> str:
     """Membuat prompt final yang dikirim ke AI."""
     header = "=" * 60
-    # Potong kode jika terlalu besar untuk mencegah OOM / Timeout ekstrem
+    # Batasi kode maksimal 15.000 karakter agar mencegah timeout
     truncated_code = mql5_code[:15000] if len(mql5_code) > 15000 else mql5_code
-    return f"{header}\nSOURCE CODE MQL5:\n```mql5\n{truncated_code}\n```\n{header}\nINSTRUKSI:\nBedah kode MQL5 di atas sesuai format terstruktur. Gunakan Bahasa Indonesia yang tegas dan langsung ke intinya."
+    return f"{header}\nSOURCE CODE MQL5:\n```mql5\n{truncated_code}\n```\n{header}\nINSTRUKSI:\nBedah kode MQL5 di atas sesuai format terstruktur. Cari bug dan berikan saran perbaikan kodingan secara spesifik. Gunakan Bahasa Indonesia yang tegas dan langsung ke intinya."
 
 # ============================================================
 # EXPLAIN EA FUNCTION
 # ============================================================
 
 def explain_ea(mql5_code: str) -> str:
-    """Mengirim kode MQL5 ke AI dan mengembalikan penjelasan ringkas ber-ikon."""
+    """Mengirim kode MQL5 ke AI dan mengembalikan penjelasan ringkas beserta bug report."""
     if not mql5_code or not mql5_code.strip():
         return "❌ Kode MQL5 kosong. Harap paste atau upload file EA terlebih dahulu."
     
@@ -90,7 +95,7 @@ def explain_ea(mql5_code: str) -> str:
                 {"role": "user", "content": build_prompt(mql5_code)}
             ],
             temperature=0.2,
-            max_tokens=1000
+            max_tokens=1200
         )
         
         if response.choices and len(response.choices) > 0:
