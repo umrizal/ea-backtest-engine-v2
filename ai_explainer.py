@@ -10,7 +10,7 @@ from openai import OpenAI
 
 API_KEY = os.getenv("FLAZ_API_KEY", "sk-rZLDmCndTU3LC8mO2TQ4Ow")
 BASE_URL = os.getenv("FLAZ_BASE_URL", "https://ai.flaz.id/v1")
-MODEL = os.getenv("FLAZ_MODEL", "gpt")
+MODEL = os.getenv("FLAZ_MODEL", "gpt-5.4-nano")
 
 # Inisialisasi OpenAI Client dengan timeout 120 detik
 client = OpenAI(
