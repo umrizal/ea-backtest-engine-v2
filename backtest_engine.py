@@ -94,7 +94,7 @@ class BacktestEngine:
     ):
         self.tick_data_dir = os.path.abspath(tick_data_dir)
 
-        os.makedirs(self.tick_data_dir, exist_ok=True)
+        os.makedirs(folder_path, exist_ok=True)
 
         self.sheet_sync = (
             sheet_sync

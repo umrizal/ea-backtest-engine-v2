@@ -411,26 +411,26 @@ def run_backtest():
 
         data_path = os.path.join(os.path.dirname(__file__), 'data', data_file)
 
-        # Inisialisasi Engine
+        # Inisialisasi BacktestEngine menggunakan file_path
         try:
-            engine = BacktestEngine(data_path)
+            engine = BacktestEngine(file_path=data_path)
         except TypeError:
             try:
-                engine = BacktestEngine(data_file=data_path)
+                engine = BacktestEngine(data_path)
             except TypeError:
                 engine = BacktestEngine()
 
-        # Parameter untuk Backtest
+        # Parameter yang dikirimkan ke method eksekusi
         kwargs = {
             "mql5_code": mql5_code,
             "code": mql5_code,
-            "data_path": data_path,
+            "file_path": data_path,
             "initial_balance": float(data.get('initial_balance') or data.get('balance') or 10000),
             "start_date": data.get('start_date'),
             "end_date": data.get('end_date')
         }
 
-        # Deteksi otomatis nama method eksekusi pada BacktestEngine
+        # Deteksi method eksekusi pada BacktestEngine
         run_method = None
         for method_name in ['run_backtest', 'run', 'execute', 'start', 'backtest']:
             if hasattr(engine, method_name) and callable(getattr(engine, method_name)):
@@ -443,7 +443,7 @@ def run_backtest():
                 "error": "Tidak dapat menemukan method eksekusi pada BacktestEngine."
             }), 500
 
-        # Eksekusi dengan menyesuaikan argumen yang diterima method
+        # Filter parameter agar hanya mengirim argumen yang diterima method
         import inspect
         sig = inspect.signature(run_method)
         valid_kwargs = {k: v for k, v in kwargs.items() if k in sig.parameters}
