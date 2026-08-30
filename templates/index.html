@@ -323,25 +323,27 @@
     if (viewName === 'fullreport') populateReportJobSelect();
   }
 
-  function extractAndSetEAName(code) {
+function extractAndSetEAName(code) {
     if (!code) return;
-  
-    // Pecah teks berdasarkan baris baru (newline)
+    
+    // Pecah teks berdasarkan baris
     const lines = code.split(/\r?\n/);
-  
-    // Pastikan teks memiliki minimal 2 baris
-    if (lines.length >= 2) {
-      let secondLine = lines[1].trim(); // Ambil baris kedua
     
-      // Bersihkan karakter komentar MQL5 (//, /*, *, #property, dll.) jika ada
-      secondLine = secondLine.replace(/^(\/\/|\/\*|\*|#property\s+copyright|#property\s+link)\s*/i, '').replace(/["';]/g, '').trim();
-    
-      if (secondLine) {
-        document.getElementById('eaName').value = secondLine;
+    // Ambil baris kedua (index 1)
+    if (lines.length > 1) {
+      let line2 = lines[1].trim();
+      
+      // Bersihkan tanda komentar MQL5 (//, /*, *, #property, petik, koma)
+      line2 = line2.replace(/^(\/\/|\/\*|\*|#property\s+\w+)\s*/i, '')
+                   .replace(/["';]/g, '')
+                   .trim();
+                   
+      if (line2) {
+        document.getElementById('eaName').value = line2;
       }
     }
   }
-
+  
   async function loadDataFiles() {
     try {
       const res = await fetch('/api/data-files');
