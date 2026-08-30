@@ -73,6 +73,8 @@
     .trade-buy { color: var(--green); font-weight: 800; }
     .trade-sell { color: var(--red); font-weight: 800; }
     .chart-tooltip-note { font-family: var(--font-mono); }
+    .sim-canvas-wrap { position: relative; }
+    .sim-axis-y { position: absolute; left: 0; top: 0; bottom: 24px; width: 62px; pointer-events: none; font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
     @media (max-width: 1000px) {
       .sidebar { width: 210px; }
       .main { margin-left: 210px; width: calc(100% - 210px); padding: 18px; }
@@ -435,6 +437,14 @@
           }
         });
     });
+
+    // Filter interaktif untuk Trading History (sebelumnya tidak pernah tersambung ke JS)
+    const historySearchEl = document.getElementById('historySearch');
+    const historyDirectionEl = document.getElementById('historyDirection');
+    const historyResultEl = document.getElementById('historyResult');
+    if (historySearchEl) historySearchEl.addEventListener('input', renderTradingHistoryRows);
+    if (historyDirectionEl) historyDirectionEl.addEventListener('change', renderTradingHistoryRows);
+    if (historyResultEl) historyResultEl.addEventListener('change', renderTradingHistoryRows);
   });
 
   function switchView(viewName) {
@@ -583,6 +593,11 @@ function buildBacktestPayload() {
       pFill.style.width = '10%';
       statusText.innerText = 'Memulai proses Backtest CSV Engine...';
 
+      // Bersihkan chart/history sesi sebelumnya agar tidak tercampur antar EA
+      currentTradingHistory = [];
+      document.getElementById('chartSessionBadge').className = 'badge yellow';
+      document.getElementById('chartSessionBadge').innerText = 'MEMPROSES...';
+
       const res = await fetch(`${API_BASE}/api/run-backtest`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -612,12 +627,14 @@ function buildBacktestPayload() {
       renderChart(report.equity_curve || []);
       renderLogs(report.trades || []);
 
-      // IMPORTANT: chart marker + trading history memakai session/job yang sama.
-      // Ini membuat visual dan tabel selalu sinkron dengan hasil backtest terakhir.
-      if (currentSessionId) {
-        renderChartWithMarkers(currentSessionId);
-        renderTradingHistory(currentSessionId);
-      }
+      // FIX job/session: sebelumnya kode memanggil renderChartWithMarkers(sessionId) &
+      // renderTradingHistory(sessionId) yang tidak pernah ter-definisi, sehingga trading
+      // history TIDAK PERNAH terisi untuk EA manapun. Sekarang keduanya langsung memakai
+      // data trades & equity_curve dari response backtest yang baru saja dijalankan, jadi
+      // selalu sinkron dengan EA/job/session yang sedang aktif (tidak tercampur EA lain).
+      const sessionLabel = currentSessionId || currentJobId || '-';
+      renderChartWithMarkers(report.equity_curve || [], report.trades || [], sessionLabel);
+      renderTradingHistory(report.trades || [], payload.initial_balance, sessionLabel);
 
     } catch (err) {
       alert('Gagal terhubung ke Server Backtest!');
@@ -691,6 +708,156 @@ function buildBacktestPayload() {
           <td class="mono" style="color:${color};font-weight:800">${money(t._profit)}</td>
         </tr>`;
     });
+  }
+
+  // ============================================================
+  // ADVANCED CHART (Equity Curve + Trade Markers) — per job/session
+  // ============================================================
+  function renderChartWithMarkers(equityCurve, trades, sessionLabel) {
+    const badge = document.getElementById('chartSessionBadge');
+    const emptyState = document.getElementById('chartEmptyState');
+    const container = document.getElementById('chart-container');
+
+    const curve = Array.isArray(equityCurve) ? equityCurve : [];
+    const normalized = normalizeTrades(trades);
+
+    if (sessionLabel) {
+      badge.className = 'badge green';
+      badge.innerText = 'SESSION: ' + String(sessionLabel).substring(0, 8);
+    } else {
+      badge.className = 'badge yellow';
+      badge.innerText = 'NO SESSION';
+    }
+
+    if (!curve.length) {
+      container.style.display = 'none';
+      emptyState.style.display = 'block';
+      return;
+    }
+    container.style.display = 'block';
+    emptyState.style.display = 'none';
+
+    const xTime = curve.map(c => c.time || c.t || '');
+    const yEquity = curve.map(c => toNumber(c.equity ?? c.val));
+
+    const equityTrace = {
+      x: xTime, y: yEquity, type: 'scatter', mode: 'lines',
+      name: 'Equity', line: { color: '#d9a75c', width: 2 },
+      hovertemplate: '%{x}<br>Equity: $%{y:,.2f}<extra></extra>'
+    };
+
+    // Cocokkan tiap trade ke titik equity terdekat berdasarkan waktu close, untuk marker BUY/SELL
+    const findEquityAt = (timeStr) => {
+      if (!timeStr || !xTime.length) return yEquity[yEquity.length - 1] || 0;
+      const target = new Date(timeStr).getTime();
+      if (isNaN(target)) return yEquity[yEquity.length - 1] || 0;
+      let best = 0, bestDiff = Infinity;
+      xTime.forEach((t, i) => {
+        const d = Math.abs(new Date(t).getTime() - target);
+        if (!isNaN(d) && d < bestDiff) { bestDiff = d; best = i; }
+      });
+      return yEquity[best];
+    };
+
+    const buys = normalized.filter(t => t._direction === 'BUY');
+    const sells = normalized.filter(t => t._direction === 'SELL');
+
+    const buyTrace = {
+      x: buys.map(t => t._openTime), y: buys.map(t => findEquityAt(t._openTime)),
+      type: 'scatter', mode: 'markers', name: 'BUY',
+      marker: { symbol: 'triangle-up', size: 9, color: '#10b981' },
+      text: buys.map(t => `BUY #${t.order_id || t.ticket || t._index}<br>Profit: $${t._profit.toFixed(2)}`),
+      hovertemplate: '%{text}<extra></extra>'
+    };
+    const sellTrace = {
+      x: sells.map(t => t._openTime), y: sells.map(t => findEquityAt(t._openTime)),
+      type: 'scatter', mode: 'markers', name: 'SELL',
+      marker: { symbol: 'triangle-down', size: 9, color: '#f43f5e' },
+      text: sells.map(t => `SELL #${t.order_id || t.ticket || t._index}<br>Profit: $${t._profit.toFixed(2)}`),
+      hovertemplate: '%{text}<extra></extra>'
+    };
+
+    const layout = {
+      paper_bgcolor: '#0d131f', plot_bgcolor: '#0d131f',
+      font: { color: '#94a3b8', family: 'JetBrains Mono, monospace', size: 11 },
+      margin: { l: 60, r: 20, t: 20, b: 50 },
+      xaxis: { title: 'Waktu (sesuai data CSV)', gridcolor: '#1a2436', type: 'date' },
+      yaxis: { title: 'Equity ($)', gridcolor: '#1a2436' },
+      legend: { orientation: 'h', y: 1.08 },
+      hovermode: 'closest'
+    };
+
+    Plotly.newPlot(container, [equityTrace, buyTrace, sellTrace], layout, { responsive: true, displaylogo: false });
+    advancedPlotReady = true;
+  }
+
+  // ============================================================
+  // TRADING HISTORY TABLE — per job/session, dengan filter & running balance
+  // ============================================================
+  let currentTradingHistory = [];
+
+  function renderTradingHistory(trades, initialBalance, sessionLabel) {
+    const normalized = normalizeTrades(trades)
+      .slice()
+      .sort((a, b) => new Date(a._openTime) - new Date(b._openTime));
+
+    // Balance berjalan = modal awal + akumulasi profit trade yang sudah close, urut waktu
+    let runningBalance = toNumber(initialBalance, 10000);
+    currentTradingHistory = normalized.map(t => {
+      runningBalance += t._profit;
+      return { ...t, _runningBalance: runningBalance };
+    });
+
+    renderTradingHistoryRows();
+  }
+
+  function renderTradingHistoryRows() {
+    const tbody = document.querySelector('#trading-history tbody');
+    const countBadge = document.getElementById('historyCountBadge');
+    const search = (document.getElementById('historySearch')?.value || '').trim().toLowerCase();
+    const dirFilter = document.getElementById('historyDirection')?.value || 'ALL';
+    const resultFilter = document.getElementById('historyResult')?.value || 'ALL';
+
+    let rows = currentTradingHistory;
+
+    if (dirFilter !== 'ALL') rows = rows.filter(t => t._direction === dirFilter);
+    if (resultFilter === 'WIN') rows = rows.filter(t => t._profit >= 0);
+    if (resultFilter === 'LOSS') rows = rows.filter(t => t._profit < 0);
+    if (search) {
+      rows = rows.filter(t => {
+        const hay = `${t.order_id || t.ticket || ''} ${t._symbol} ${t._comment} ${t._direction}`.toLowerCase();
+        return hay.includes(search);
+      });
+    }
+
+    countBadge.className = 'badge ' + (currentTradingHistory.length ? 'green' : 'yellow');
+    countBadge.innerText = `${rows.length} / ${currentTradingHistory.length} TRADES`;
+
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:30px;">
+        ${currentTradingHistory.length ? 'Tidak ada trade yang cocok dengan filter.' : 'Jalankan backtest untuk menampilkan trading history.'}
+      </td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = rows.map((t, i) => {
+      const resultClass = t._profit >= 0 ? 'trade-win' : 'trade-loss';
+      const dirClass = t._direction === 'SELL' ? 'trade-sell' : 'trade-buy';
+      return `
+        <tr>
+          <td class="mono">${i + 1}</td>
+          <td class="mono">${escapeHtml(formatCandleTime(t._openTime))}</td>
+          <td class="mono">${escapeHtml(formatCandleTime(t._closeTime))}</td>
+          <td class="mono ${dirClass}">${escapeHtml(t._direction || '-')}</td>
+          <td class="mono">${escapeHtml(t._symbol)}</td>
+          <td class="mono">${t._lot ? t._lot.toFixed(2) : '-'}</td>
+          <td class="mono">${price(t._entry)}</td>
+          <td class="mono">${price(t._close)}</td>
+          <td class="mono ${resultClass}">${money(t._profit)}</td>
+          <td class="mono">${money(t._runningBalance)}</td>
+          <td class="mono">${escapeHtml(t._comment || '-')}</td>
+        </tr>`;
+    }).join('');
   }
 
   async function fetchHistoryData() {
@@ -884,9 +1051,68 @@ function buildBacktestPayload() {
         responsive: true,
         animation: false,
         plugins: { legend: { display: false } },
-        scales: { x: { display: false }, y: { grid: { color: '#1a2436' } } }
+        scales: {
+          x: {
+            display: true,
+            title: { display: true, text: 'Waktu Perjalanan EA (sesuai data CSV)', color: '#64748b', font: { size: 10 } },
+            ticks: {
+              color: '#64748b',
+              font: { family: 'JetBrains Mono, monospace', size: 9 },
+              maxRotation: 0,
+              autoSkip: true,
+              maxTicksLimit: 8,
+              callback: function (value) {
+                return formatCandleTime(this.getLabelForValue(value));
+              }
+            },
+            grid: { color: '#1a2436' }
+          },
+          y: {
+            grid: { color: '#1a2436' },
+            ticks: { color: '#64748b', font: { family: 'JetBrains Mono, monospace', size: 10 } },
+            title: { display: true, text: 'Equity ($)', color: '#64748b', font: { size: 10 } }
+          }
+        }
       }
     });
+  }
+
+  // Balance = modal awal + total profit dari trade yang SUDAH CLOSE sampai frame ini.
+  // Equity  = Balance + floating profit dari trade yang MASIH BERJALAN (open) di frame ini.
+  function computeSimBalanceEquity(idx) {
+    const f = simData.frames[idx];
+    const initialBalance = (simData.meta && simData.meta.initial_balance != null)
+      ? toNumber(simData.meta.initial_balance)
+      : toNumber(document.getElementById('balance').value || 10000);
+
+    const trades = normalizeTrades(simData.trades || []);
+    if (!trades.length) {
+      // Fallback: backend tidak mengirim daftar trade granular, pakai nilai bawaan.
+      return { balance: toNumber(f.balance, initialBalance), equity: toNumber(f.equity, initialBalance) };
+    }
+
+    const curTime = new Date(f.t).getTime();
+    let realizedProfit = 0;
+    let openTrade = null;
+
+    trades.forEach(t => {
+      const openTime = new Date(t._openTime).getTime();
+      const closeTime = new Date(t._closeTime).getTime();
+      const isClosed = !isNaN(closeTime) && closeTime <= curTime;
+      const isOpenNow = !isNaN(openTime) && openTime <= curTime && !isClosed;
+
+      if (isClosed) realizedProfit += t._profit;
+      else if (isOpenNow) openTrade = t;
+    });
+
+    const balance = initialBalance + realizedProfit;
+    // Floating profit dari trade yang sedang berjalan (pakai field dari backend jika tersedia)
+    const floating = openTrade
+      ? toNumber(openTrade.floating_profit ?? openTrade.unrealized_profit ?? openTrade._profit, 0)
+      : 0;
+    const equity = balance + floating;
+
+    return { balance, equity };
   }
 
   function renderSimFrame(idx) {
@@ -894,10 +1120,12 @@ function buildBacktestPayload() {
     const frames = simData.frames;
     const f = frames[idx];
 
+    const { balance, equity } = computeSimBalanceEquity(idx);
+
     document.getElementById('simFrameLabel').innerText = `${idx + 1} / ${frames.length}`;
     document.getElementById('simSeek').value = idx;
-    document.getElementById('simBalance').innerText = '$' + f.balance;
-    document.getElementById('simEquity').innerText = '$' + f.equity;
+    document.getElementById('simBalance').innerText = money(balance);
+    document.getElementById('simEquity').innerText = money(equity);
     document.getElementById('simTrades').innerText = f.trades_total;
     document.getElementById('simDD').innerText = f.drawdown + '%';
 
@@ -912,8 +1140,17 @@ function buildBacktestPayload() {
 
     const eqSlice = frames.slice(0, idx + 1);
     simEquityChart.data.labels = eqSlice.map(x => x.t);
-    simEquityChart.data.datasets[0].data = eqSlice.map(x => x.equity);
+    simEquityChart.data.datasets[0].data = eqSlice.map((x, i) => computeSimBalanceEquity(i).equity);
     simEquityChart.update('none');
+  }
+
+  // Format timestamp candle (dari kolom waktu CSV) menjadi label tanggal+jam yang mudah dibaca
+  function formatCandleTime(t) {
+    if (t === undefined || t === null || t === '') return '-';
+    const d = new Date(t);
+    if (isNaN(d.getTime())) return String(t).slice(0, 16);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
   function drawCandles(slice) {
@@ -923,16 +1160,41 @@ function buildBacktestPayload() {
     ctx.clearRect(0, 0, w, h);
     if (!slice.length) return;
 
+    // Ruang untuk keterangan sumbu Y (harga) & sumbu X (tanggal/waktu)
+    const MARGIN_LEFT = 72;
+    const MARGIN_BOTTOM = 26;
+    const MARGIN_TOP = 8;
+    const plotW = w - MARGIN_LEFT;
+    const plotH = h - MARGIN_TOP - MARGIN_BOTTOM;
+
     let lo = Math.min(...slice.map(c => c.l));
     let hi = Math.max(...slice.map(c => c.h));
     const pad = (hi - lo) * 0.08 || 1;
     lo -= pad; hi += pad;
 
-    const cw = w / slice.length;
-    const yOf = (p) => h - ((p - lo) / (hi - lo)) * h;
+    const cw = plotW / slice.length;
+    const yOf = (p) => MARGIN_TOP + plotH - ((p - lo) / (hi - lo)) * plotH;
 
+    // --- Grid + label sumbu Y (rentang harga market) ---
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    const Y_STEPS = 6;
+    for (let i = 0; i <= Y_STEPS; i++) {
+      const p = lo + ((hi - lo) * i) / Y_STEPS;
+      const y = yOf(p);
+      ctx.strokeStyle = '#1a2436';
+      ctx.beginPath();
+      ctx.moveTo(MARGIN_LEFT, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+      ctx.fillStyle = '#64748b';
+      ctx.fillText(p.toFixed(2), MARGIN_LEFT - 8, y);
+    }
+
+    // --- Candle body/wick ---
     slice.forEach((c, i) => {
-      const x = i * cw + cw / 2;
+      const x = MARGIN_LEFT + i * cw + cw / 2;
       const up = c.c >= c.o;
       ctx.strokeStyle = ctx.fillStyle = up ? '#10b981' : '#f43f5e';
       ctx.lineWidth = 1;
@@ -945,6 +1207,26 @@ function buildBacktestPayload() {
       const bodyH = Math.max(1, Math.abs(yOf(c.o) - yOf(c.c)));
       ctx.fillRect(x - cw * 0.35, bodyTop, cw * 0.7, bodyH);
     });
+
+    // --- Label sumbu X (tanggal & waktu sesuai data CSV) ---
+    ctx.fillStyle = '#64748b';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const X_LABEL_COUNT = Math.min(6, slice.length);
+    const stepIdx = Math.max(1, Math.floor(slice.length / X_LABEL_COUNT));
+    for (let i = 0; i < slice.length; i += stepIdx) {
+      const x = MARGIN_LEFT + i * cw + cw / 2;
+      ctx.fillText(formatCandleTime(slice[i].t), x, h - MARGIN_BOTTOM + 6);
+    }
+    const lastIdx = slice.length - 1;
+    ctx.fillText(formatCandleTime(slice[lastIdx].t), MARGIN_LEFT + lastIdx * cw + cw / 2, h - MARGIN_BOTTOM + 6);
+
+    // garis dasar sumbu X
+    ctx.strokeStyle = '#1a2436';
+    ctx.beginPath();
+    ctx.moveTo(MARGIN_LEFT, h - MARGIN_BOTTOM);
+    ctx.lineTo(w, h - MARGIN_BOTTOM);
+    ctx.stroke();
   }
 
   async function populateReportJobSelect() {
