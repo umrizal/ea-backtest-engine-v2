@@ -29,6 +29,7 @@ import numpy as np
 from ai_explainer import AIExplainer
 from analytics import QuantitativeAnalytics
 from sheet_sync import SheetSyncManager
+from backtest_engine import BacktestEngine
 
 
 class BacktestEngine:
@@ -4027,6 +4028,71 @@ class BacktestEngine:
 
         return results
 
+    # ========================================================
+    # WRAPPER: RUN_BACKTEST (KWARGS)
+    # ========================================================
+
+    def run_backtest(
+        self,
+        mql5_code="",
+        code="",
+        ea_name="EA_MQL5",
+        symbol="XAUUSD",
+        start_date=None,
+        end_date=None,
+        balance=10000.0,
+        lot=0.1,
+        year=None,
+        sync_sheet=False,
+        **kwargs
+    ):
+        """
+        Wrapper untuk run() dengan argumen keyword.
+        """
+
+        raw_code = mql5_code or code
+
+        if year and not start_date:
+            start_date = f"{year}-01-01"
+            end_date = f"{year}-12-31"
+
+        params = {
+            "ea_name": ea_name,
+            "symbol": symbol,
+            "start_date": start_date,
+            "end_date": end_date,
+            "balance": float(balance),
+            "lot": float(lot),
+            "mql5_code": raw_code,
+            "sync_sheet": sync_sheet,
+        }
+
+        params.update(kwargs)
+
+        return self.run(params)
+
+
+params = {
+    "ea_name": "TrendGridEA",
+    "symbol": "XAUUSD",
+    "start_date": "2026-01-01",
+    "end_date": "2026-08-28",
+    "balance": 10000,
+    "lot": 0.1,
+    "mql5_code": """
+input double TakeProfit = 50;
+input double StopLoss = 30;
+input double Lot = 0.1;
+""",
+    "sync_sheet": False,
+}
+
+engine = BacktestEngine()
+result = engine.run(params)
+
+print(f"Total trades: {len(result.get('trades', []))}")
+print(f"Final balance: {result.get('final_balance', 0):,.2f}")
+print(f"Max DD: {result.get('max_drawdown_engine', 0):.2f}%")
 
 # ============================================================
 # DIRECT TEST
@@ -4052,7 +4118,7 @@ if __name__ == "__main__":
     )
 
     engine = BacktestEngine(
-        tick_data_dir="./data"
+    tick_data_dir="./data"
     )
 
     print(
