@@ -409,7 +409,7 @@ def run_backtest():
         # Penentuan file data CSV
         data_file = data.get('data_file') or data.get('symbol', '')
         if not str(data_file).endswith('.csv'):
-            data_file = "XAUUSD_H1_202601020100_202608280200.csv"[cite: 1]
+            data_file = "XAUUSD_H1_202601020100_202608280200.csv"
 
         data_path = os.path.join(os.path.dirname(__file__), 'data', data_file)
 
