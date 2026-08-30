@@ -956,6 +956,35 @@ document.getElementById('dataSelect').addEventListener('change', function() {
       </div>
       ${logicHtml}
     `;
+// Auto detect Nama EA dari komentar atau input MQL5
+document.getElementById('mql5Code').addEventListener('input', function() {
+    const code = this.value;
+    const match = code.match(/#property\s+link\s+"([^"]+)"|class\s+(\w+)|#property\s+copyright\s+"([^"]+)"/i);
+    if (match) {
+        const detectedName = match[1] || match[2] || match[3];
+        if (detectedName) {
+            document.getElementById('eaName').value = detectedName;
+        }
+    }
+});
+
+// Auto set tanggal & timeframe dari data CSV yang dipilih
+document.getElementById('dataSelect').addEventListener('change', function() {
+    const selectedFile = this.value;
+    fetch('/api/data-files')
+        .then(res => res.json())
+        .then(data => {
+            if (data.success && data.details) {
+                const fileInfo = data.details.find(item => item.filename === selectedFile);
+                if (fileInfo) {
+                    if (document.getElementById('startDate')) document.getElementById('startDate').value = fileInfo.start_date;
+                    if (document.getElementById('endDate')) document.getElementById('endDate').value = fileInfo.end_date;
+                    if (document.getElementById('timeframeSelect')) document.getElementById('timeframeSelect').value = fileInfo.timeframe;
+                }
+            }
+        });
+});
+
   }
 </script>
 </body>
