@@ -89,13 +89,22 @@ class BacktestEngine:
     def __init__(
         self,
         tick_data_dir="data",
+        file_path=None,
+        data_path=None,
         sheet_sync=None,
         ai_explainer=None,
-        
+        **kwargs  # Mengakomodasi argumen opsional tambahan
     ):
-        self.tick_data_dir = os.path.abspath(tick_data_dir)
+        # Menggunakan file_path/data_path jika diberikan, atau default ke tick_data_dir
+        target_path = file_path or data_path or tick_data_dir
 
-        # PERBAIKAN: Gunakan self.tick_data_dir menggantikan folder_path
+        if target_path and os.path.isfile(target_path):
+            self.tick_data_dir = os.path.abspath(os.path.dirname(target_path))
+            self.default_file_path = os.path.abspath(target_path)
+        else:
+            self.tick_data_dir = os.path.abspath(target_path or "data")
+            self.default_file_path = None
+
         os.makedirs(self.tick_data_dir, exist_ok=True)
 
         self.sheet_sync = (
