@@ -5,6 +5,7 @@
   <title>Pintarin Laboratorium EA — Scientific Quantitative Trading Research</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <style>
     :root {
       --bg: #070a10; --panel: #0d131f; --border: #1a2436; --gold: #d9a75c;
@@ -62,7 +63,30 @@
     .ai-box { background: #070c14; border: 1px solid #1e293b; padding: 12px; border-radius: 6px; color: #94a3b8; font-family: var(--font-mono); font-size: 11px; white-space: pre-wrap; margin-top: 10px; max-height: 400px; overflow-y: auto; }
     .sim-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
     .sim-toolbar input[type="range"] { accent-color: var(--gold); }
-  </style>
+  
+    #advancedChartCard .js-plotly-plot { border-radius: 8px; overflow: hidden; }
+    #trading-history th { position: sticky; top: 0; z-index: 2; }
+    #trading-history td, #trading-history th { white-space: nowrap; }
+    #trading-history tbody tr:hover { background: rgba(217,167,92,.06); }
+    .trade-win { color: var(--green) !important; }
+    .trade-loss { color: var(--red) !important; }
+    .trade-buy { color: var(--green); font-weight: 800; }
+    .trade-sell { color: var(--red); font-weight: 800; }
+    .chart-tooltip-note { font-family: var(--font-mono); }
+    @media (max-width: 1000px) {
+      .sidebar { width: 210px; }
+      .main { margin-left: 210px; width: calc(100% - 210px); padding: 18px; }
+      .grid-control { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 700px) {
+      .sidebar { position: static; width: 100%; height: auto; }
+      .layout { display: block; }
+      .main { margin-left: 0; width: 100%; }
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+      .topbar { flex-direction: column; align-items: flex-start; gap: 12px; }
+    }
+
+</style>
 </head>
 <body>
 
@@ -234,101 +258,56 @@
       </div>
     </div>
 
-<div id="chart-container" style="width:100%; height:600px;"></div>
 
-<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-<script>
+          <div class="card" id="advancedChartCard">
+            <h3>
+              <span>📊 Equity Curve + Trade Markers</span>
+              <span id="chartSessionBadge" class="badge yellow">NO SESSION</span>
+            </h3>
+            <div id="chart-container" style="width:100%; height:520px;"></div>
+            <div id="chartEmptyState" style="text-align:center;color:var(--text-muted);padding:80px 20px;display:none;">
+              Belum ada data chart untuk session ini.
+            </div>
+          </div>
 
-function renderChartWithMarkers(sessionId) {
-    fetch(`/chart_data/${sessionId}`)
-        .then(res => res.json())
-        .then(data => {
-            const equityCurve = data.equity_curve;
-            const trades = data.trades;
-            
-            // Extract time dan equity
-            const times = equityCurve.map(p => p.time);
-            const equities = equityCurve.map(p => p.equity);
-            
-            // Buat trace untuk equity curve
-            const equityTrace = {
-                x: times,
-                y: equities,
-                type: 'scatter',
-                mode: 'lines',
-                name: 'Equity',
-                line: {color: '#2196F3', width: 2}
-            };
-            
-            // Buat markers untuk Buy entries
-            const buyMarkers = {
-                x: [],
-                y: [],
-                mode: 'markers',
-                type: 'scatter',
-                name: 'Buy',
-                marker: {
-                    symbol: 'triangle-up',
-                    size: 12,
-                    color: '#4CAF50'
-                },
-                text: [],
-                hoverinfo: 'text'
-            };
-            
-            // Buat markers untuk Sell entries
-            const sellMarkers = {
-                x: [],
-                y: [],
-                mode: 'markers',
-                type: 'scatter',
-                name: 'Sell',
-                marker: {
-                    symbol: 'triangle-down',
-                    size: 12,
-                    color: '#F44336'
-                },
-                text: [],
-                hoverinfo: 'text'
-            };
-            
-            // Populate markers dari trades
-            trades.forEach(trade => {
-                const entryTime = trade.open_time;
-                const closeTime = trade.close_time;
-                const profit = trade.profit;
-                const direction = trade.direction;
-                const lot = trade.lot;
-                
-                // Cari equity pada saat entry
-                const entryIndex = times.findIndex(t => t >= entryTime);
-                const entryEquity = entryIndex >= 0 ? equities[entryIndex] : 0;
-                
-                const markerText = `${direction} ${lot} lot<br>Profit: $${profit.toFixed(2)}<br>${closeTime}`;
-                
-                if (direction === 'BUY') {
-                    buyMarkers.x.push(entryTime);
-                    buyMarkers.y.push(entryEquity);
-                    buyMarkers.text.push(markerText);
-                } else {
-                    sellMarkers.x.push(entryTime);
-                    sellMarkers.y.push(entryEquity);
-                    sellMarkers.text.push(markerText);
-                }
-            });
-            
-            const layout = {
-                title: 'Equity Curve dengan Entry Markers',
-                xaxis: {title: 'Time'},
-                yaxis: {title: 'Equity ($)'},
-                hovermode: 'closest',
-                showlegend: true
-            };
-            
-            Plotly.newPlot('chart-container', [equityTrace, buyMarkers, sellMarkers], layout);
-        });
-}
-</script>
+
+          <div class="card" id="tradingHistoryCard">
+            <h3>
+              <span>📜 Trading History</span>
+              <span id="historyCountBadge" class="badge yellow">0 TRADES</span>
+            </h3>
+
+            <div class="sim-toolbar" style="margin-bottom:12px;">
+              <input id="historySearch" type="search" placeholder="🔎 Cari order, symbol, comment, BUY/SELL..." style="flex:1;min-width:220px;">
+              <select id="historyDirection" style="width:130px;">
+                <option value="ALL">All Direction</option>
+                <option value="BUY">BUY</option>
+                <option value="SELL">SELL</option>
+              </select>
+              <select id="historyResult" style="width:130px;">
+                <option value="ALL">All Result</option>
+                <option value="WIN">Profit</option>
+                <option value="LOSS">Loss</option>
+              </select>
+            </div>
+
+            <div style="overflow:auto;max-height:500px;border:1px solid var(--border);border-radius:8px;">
+              <table id="trading-history">
+                <thead>
+                  <tr>
+                    <th>No</th><th>Time Open</th><th>Time Close</th><th>Type</th>
+                    <th>Symbol</th><th>Lot</th><th>Entry</th><th>Close</th>
+                    <th>Profit/Loss</th><th>Balance</th><th>Comment</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:30px;">
+                    Jalankan backtest untuk menampilkan trading history.
+                  </td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
 
     <!-- VIEW FULL REPORT -->
     <div id="view-fullreport" class="view">
@@ -381,6 +360,56 @@ function renderChartWithMarkers(sessionId) {
   const API_BASE = window.location.origin;
   let equityChart = null;
   let currentJobId = null;
+  let currentSessionId = null;
+  let allTradingHistory = [];
+  let advancedPlotReady = false;
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => ({
+      '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;'
+    }[ch]));
+  }
+
+  function toNumber(value, fallback = 0) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function money(value) {
+    return '$' + toNumber(value).toLocaleString('en-US', {
+      minimumFractionDigits: 2, maximumFractionDigits: 2
+    });
+  }
+
+  function price(value) {
+    const n = toNumber(value);
+    return n ? n.toFixed(5) : '-';
+  }
+
+  function getTradeDirection(t) {
+    return String(t.direction ?? t.arah ?? t.type ?? '').toUpperCase();
+  }
+
+  function getTradeProfit(t) {
+    return toNumber(t.profit ?? t.pnl ?? t.profit_loss);
+  }
+
+  function normalizeTrades(trades) {
+    return (Array.isArray(trades) ? trades : []).map((t, i) => ({
+      ...t,
+      _index: i + 1,
+      _direction: getTradeDirection(t),
+      _profit: getTradeProfit(t),
+      _openTime: t.open_time ?? t.time_open ?? t.open ?? '-',
+      _closeTime: t.close_time ?? t.time_close ?? t.close ?? '-',
+      _symbol: t.symbol ?? '-',
+      _lot: toNumber(t.lot ?? t.volume),
+      _entry: toNumber(t.entry_price ?? t.open_price),
+      _close: toNumber(t.close_price ?? t.exit_price),
+      _balance: toNumber(t.balance ?? t.equity),
+      _comment: t.comment ?? ''
+    }));
+  }
 
   document.addEventListener("DOMContentLoaded", function() {
     loadDataFiles();
@@ -571,13 +600,24 @@ function buildBacktestPayload() {
       statusText.innerText = 'Backtest selesai!';
       
       const report = data.report || data.data || {};
-      document.getElementById('kpiProfit').innerText = '$' + (report.net_profit || 0);
-      document.getElementById('kpiPF').innerText = report.profit_factor || '0.0';
-      document.getElementById('kpiSortino').innerText = report.sortino_ratio || '0.0';
-      document.getElementById('kpiDD').innerText = (report.max_drawdown_pct || 0) + '%';
+      currentJobId = data.job_id || data.session_id || report.job_id || report.session_id || currentJobId;
+      currentSessionId = data.session_id || data.job_id || report.session_id || report.job_id || currentJobId;
+
+      document.getElementById('btnOpenReport').disabled = !currentJobId;
+      document.getElementById('kpiProfit').innerText = money(report.net_profit);
+      document.getElementById('kpiPF').innerText = toNumber(report.profit_factor).toFixed(2);
+      document.getElementById('kpiSortino').innerText = toNumber(report.sortino_ratio).toFixed(2);
+      document.getElementById('kpiDD').innerText = toNumber(report.max_drawdown_pct).toFixed(2) + '%';
 
       renderChart(report.equity_curve || []);
       renderLogs(report.trades || []);
+
+      // IMPORTANT: chart marker + trading history memakai session/job yang sama.
+      // Ini membuat visual dan tabel selalu sinkron dengan hasil backtest terakhir.
+      if (currentSessionId) {
+        renderChartWithMarkers(currentSessionId);
+        renderTradingHistory(currentSessionId);
+      }
 
     } catch (err) {
       alert('Gagal terhubung ke Server Backtest!');
@@ -587,8 +627,9 @@ function buildBacktestPayload() {
   }
 
   function openMT5Report() {
-    if (currentJobId) {
-      window.open(`${API_BASE}/api/report/${currentJobId}`, '_blank');
+    if (currentJobId || currentSessionId) {
+      const reportId = currentJobId || currentSessionId;
+      window.open(`${API_BASE}/api/report/${encodeURIComponent(reportId)}`, '_blank');
     } else {
       alert('Belum ada backtest yang selesai dijalankan.');
     }
@@ -630,22 +671,25 @@ function buildBacktestPayload() {
 
   function renderLogs(trades) {
     const tbody = document.getElementById('tradeLogs');
+    const normalized = normalizeTrades(trades);
     tbody.innerHTML = '';
-    if (!trades || trades.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Tidak ada transaksi pada periode ini.</td></tr>';
+
+    if (!normalized.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Tidak ada transaksi pada periode ini.</td></tr>';
       return;
     }
-    trades.slice(-20).reverse().forEach(t => {
+
+    normalized.slice(-20).reverse().forEach(t => {
+      const color = t._profit >= 0 ? 'var(--green)' : 'var(--red)';
       tbody.innerHTML += `
         <tr>
-          <td class="mono">${t.close_time || t.open_time || '-'}</td>
-          <td class="mono">${t.order_id || '-'}</td>
-          <td><b>${t.arah || t.type || '-'}</b></td>
-          <td class="mono">${t.harga_entry || t.open_price || '-'}</td>
-          <td class="mono">${t.comment || '-'}</td>
-          <td class="mono" style="color: ${(t.profit || 0) >= 0 ? '#10b981' : '#f43f5e'}">$${t.profit || 0}</td>
-        </tr>
-      `;
+          <td class="mono">${escapeHtml(t._closeTime || t._openTime)}</td>
+          <td class="mono">${escapeHtml(t.order_id || t.ticket || '-')}</td>
+          <td><b>${escapeHtml(t._direction || '-')}</b></td>
+          <td class="mono">${price(t._entry)}</td>
+          <td class="mono">${escapeHtml(t._comment || '-')}</td>
+          <td class="mono" style="color:${color};font-weight:800">${money(t._profit)}</td>
+        </tr>`;
     });
   }
 
@@ -965,70 +1009,8 @@ function buildBacktestPayload() {
   }
 </script>
 
-<div style="margin-top: 40px;">
-    <h3>Trading History</h3>
-    <div style="overflow-x: auto;">
-        <table id="trading-history" style="width:100%; border-collapse: collapse; font-size: 13px;">
-            <thead>
-                <tr style="background: #f5f5f5;">
-                    <th style="padding: 8px; border: 1px solid #ddd;">No</th>
-                    <th style="padding: 8px; border: 1px solid #ddd;">Time Open</th>
-                    <th style="padding: 8px; border: 1px solid #ddd;">Time Close</th>
-                    <th style="padding: 8px; border: 1px solid #ddd;">Type</th>
-                    <th style="padding: 8px; border: 1px solid #ddd;">Symbol</th>
-                    <th style="padding: 8px; border: 1px solid #ddd;">Lot</th>
-                    <th style="padding: 8px; border: 1px solid #ddd;">Entry Price</th>
-                    <th style="padding: 8px; border: 1px solid #ddd;">Close Price</th>
-                    <th style="padding: 8px; border: 1px solid #ddd;">Profit/Loss</th>
-                    <th style="padding: 8px; border: 1px solid #ddd;">Balance</th>
-                    <th style="padding: 8px; border: 1px solid #ddd;">Comment</th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- Data akan diisi via JavaScript -->
-            </tbody>
-        </table>
-    </div>
-</div>
 
-<script>
-function renderTradingHistory(sessionId) {
-    fetch(`/chart_data/${sessionId}`)
-        .then(res => res.json())
-        .then(data => {
-            const trades = data.trades;
-            const tbody = document.querySelector('#trading-history tbody');
-            tbody.innerHTML = '';
 
-            trades.forEach((trade, index) => {
-                const tr = document.createElement('tr');
 
-                const profit = trade.profit || 0;
-                const profitStyle = profit >= 0 ? 'color: #4CAF50;' : 'color: #F44336;';
-
-                tr.innerHTML = `
-                    <td style="padding: 6px; border: 1px solid #ddd; text-align: center;">${index + 1}</td>
-                    <td style="padding: 6px; border: 1px solid #ddd;">${trade.open_time || '-'}</td>
-                    <td style="padding: 6px; border: 1px solid #ddd;">${trade.close_time || '-'}</td>
-                    <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-weight: bold; ${trade.direction === 'BUY' ? 'color: #4CAF50;' : 'color: #F44336;'}">${trade.direction || '-'}</td>
-                    <td style="padding: 6px; border: 1px solid #ddd; text-align: center;">${trade.symbol || '-'}</td>
-                    <td style="padding: 6px; border: 1px solid #ddd; text-align: center;">${trade.lot || 0}</td>
-                    <td style="padding: 6px; border: 1px solid #ddd; text-align: right;">${(trade.entry_price || 0).toFixed(5)}</td>
-                    <td style="padding: 6px; border: 1px solid #ddd; text-align: right;">${(trade.close_price || 0).toFixed(5)}</td>
-                    <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-weight: bold; ${profitStyle}">$${profit.toFixed(2)}</td>
-                    <td style="padding: 6px; border: 1px solid #ddd; text-align: right;">${(trade.balance || 0).toFixed(2)}</td>
-                    <td style="padding: 6px; border: 1px solid #ddd;">${trade.comment || '-'}</td>
-                `;
-
-                tbody.appendChild(tr);
-            });
-        });
-}
-</script>
-
-<style>
-.profit { color: #4CAF50; }
-.loss { color: #F44336; }
-</style>
 </body>
 </html>
