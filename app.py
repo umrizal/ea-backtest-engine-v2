@@ -398,6 +398,7 @@ def run_backtest():
     try:
         data = request.json or {}
         
+        # Menerima kode MQL5 dari payload JS
         mql5_code = data.get('code') or data.get('mql5_code', '')
         if not mql5_code or not str(mql5_code).strip():
             return jsonify({
@@ -405,50 +406,51 @@ def run_backtest():
                 "error": "Kode MQL5 tidak ditemukan. Harap paste kode atau upload file EA."
             }), 400
 
+        # Penentuan file data CSV
         data_file = data.get('data_file') or data.get('symbol', '')
         if not str(data_file).endswith('.csv'):
             data_file = "XAUUSD_H1_202601020100_202608280200.csv"[cite: 1]
 
         data_path = os.path.join(os.path.dirname(__file__), 'data', data_file)
 
-        # Inisialisasi BacktestEngine menggunakan file_path
-        try:
-            engine = BacktestEngine(file_path=data_path)
-        except TypeError:
-            try:
-                engine = BacktestEngine(data_path)
-            except TypeError:
-                engine = BacktestEngine()
+        # Inisialisasi BacktestEngine
+        engine = BacktestEngine(file_path=data_path)
 
-        # Parameter yang dikirimkan ke method eksekusi
-        kwargs = {
-            "mql5_code": mql5_code,
-            "code": mql5_code,
-            "file_path": data_path,
-            "initial_balance": float(data.get('initial_balance') or data.get('balance') or 10000),
-            "start_date": data.get('start_date'),
-            "end_date": data.get('end_date')
-        }
+        # Parameter untuk simulasi
+        initial_balance = float(data.get('initial_balance') or data.get('balance') or 10000)
+        start_date = data.get('start_date')
+        end_date = data.get('end_date')
 
-        # Deteksi method eksekusi pada BacktestEngine
-        run_method = None
-        for method_name in ['run_backtest', 'run', 'execute', 'start', 'backtest']:
-            if hasattr(engine, method_name) and callable(getattr(engine, method_name)):
-                run_method = getattr(engine, method_name)
-                break
-
-        if not run_method:
+        # Memanggil method eksekusi secara langsung dengan fallback
+        if hasattr(engine, 'run_backtest'):
+            results = engine.run_backtest(
+                mql5_code=mql5_code,
+                file_path=data_path,
+                initial_balance=initial_balance,
+                start_date=start_date,
+                end_date=end_date
+            )
+        elif hasattr(engine, 'run'):
+            results = engine.run(
+                mql5_code=mql5_code,
+                file_path=data_path,
+                initial_balance=initial_balance,
+                start_date=start_date,
+                end_date=end_date
+            )
+        elif hasattr(engine, 'execute'):
+            results = engine.execute(
+                mql5_code=mql5_code,
+                file_path=data_path,
+                initial_balance=initial_balance,
+                start_date=start_date,
+                end_date=end_date
+            )
+        else:
             return jsonify({
                 "success": False,
-                "error": "Tidak dapat menemukan method eksekusi pada BacktestEngine."
+                "error": "Method eksekusi (run_backtest/run/execute) tidak ditemukan pada BacktestEngine."
             }), 500
-
-        # Filter parameter agar hanya mengirim argumen yang diterima method
-        import inspect
-        sig = inspect.signature(run_method)
-        valid_kwargs = {k: v for k, v in kwargs.items() if k in sig.parameters}
-
-        results = run_method(**valid_kwargs)
 
         return jsonify({
             "success": True,
