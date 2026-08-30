@@ -93,9 +93,8 @@ class BacktestEngine:
         data_path=None,
         sheet_sync=None,
         ai_explainer=None,
-        **kwargs  # Mengakomodasi argumen opsional tambahan
+        **kwargs
     ):
-        # Menggunakan file_path/data_path jika diberikan, atau default ke tick_data_dir
         target_path = file_path or data_path or tick_data_dir
 
         if target_path and os.path.isfile(target_path):
@@ -234,60 +233,6 @@ class BacktestEngine:
                     variant.upper()
                 ] = standard
 
-    def run_backtest(
-            self,
-            mql5_code="",
-            code="",
-            file_path=None,
-            data_path=None,
-            initial_balance=10000.0,
-            start_date=None,
-            end_date=None,
-            progress_callback=None,
-            **kwargs
-        ):
-            raw_code = mql5_code or code
-            path = file_path or data_path or getattr(self, 'default_file_path', None)
-
-            self._progress(progress_callback, 10)
-            df = self.load_data(file_path=path, start_date=start_date, end_date=end_date)
-
-            self._progress(progress_callback, 40)
-
-            balance = float(initial_balance)
-            trades = []
-            equity_curve = []
-
-            close_prices = df['close'].values if 'close' in df.columns else df['bid'].values
-            dates = df['datetime'].dt.strftime('%Y-%m-%d %H:%M:%S').values if 'datetime' in df.columns else range(len(df))
-
-            for i in range(len(close_prices)):
-                price = close_prices[i]
-                t = dates[i]
-                equity_curve.append({"time": str(t), "equity": balance})
-
-            self._progress(progress_callback, 90)
-
-            stats = {
-                "net_profit": 0.0,
-                "profit_factor": "0.00",
-                "sortino_ratio": "0.00",
-                "max_drawdown_pct": 0.0,
-                "total_trades": 0,
-                "win_rate": 0.0,
-                "trades": trades,
-                "equity_curve": equity_curve
-            }
-
-            self._progress(progress_callback, 100)
-            return stats
-
-    def run(self, *args, **kwargs):
-        return self.run_backtest(*args, **kwargs)
-
-    def execute(self, *args, **kwargs):
-        return self.run_backtest(*args, **kwargs)
-
     # ========================================================
     # PROGRESS
     # ========================================================
@@ -319,7 +264,6 @@ class BacktestEngine:
         if upper in self.symbol_to_standard:
             return self.symbol_to_standard[upper]
 
-        # Remove broker suffix.
         base = re.split(
             r"[._!]",
             upper
@@ -399,10 +343,6 @@ class BacktestEngine:
 
         Index/Crypto:
             1.0
-
-        Catatan:
-        Untuk akurasi broker tertentu dapat diberikan melalui params:
-            point_size
         """
 
         s = self._clean_symbol(symbol)
@@ -583,16 +523,6 @@ class BacktestEngine:
     ):
         """
         Mencari SEMUA file monthly yang diperlukan.
-
-        Contoh:
-
-            XAUUSD
-            2024-01-01
-            2024-12-31
-
-        menghasilkan:
-
-            XAUUSD_H1_202601020100_202608280200.csv
         """
 
         clean_symbol = self._clean_symbol(
@@ -624,7 +554,6 @@ class BacktestEngine:
                     files.append(path)
                     break
 
-        # Fallback case-insensitive glob.
         if not files:
 
             for ym in months:
@@ -648,15 +577,6 @@ class BacktestEngine:
                         sorted(found)[0]
                     )
 
-        # Fallback terakhir: satu file besar per-symbol yang TIDAK
-        # mengikuti pola penamaan bulanan/tahunan sama sekali, mis.
-        # export langsung dari MT5:
-        #
-        #   XAUUSD_H1_202601020100_202608280200.csv
-        #
-        # File seperti ini berisi seluruh rentang data dalam satu
-        # file, jadi cukup dipakai apa adanya lalu difilter per
-        # tanggal oleh _filter_by_date().
         if not files:
 
             single_file_patterns = [
@@ -675,9 +595,6 @@ class BacktestEngine:
             for pattern in single_file_patterns:
                 found.extend(glob.glob(pattern))
 
-            # Case-insensitive: glob di Linux case-sensitive, jadi
-            # coba juga pencocokan manual terhadap semua file di
-            # folder data (mis. symbol "xauusd" vs file "XAUUSD...").
             if not found and os.path.isdir(self.tick_data_dir):
 
                 for fname in os.listdir(self.tick_data_dir):
@@ -691,8 +608,6 @@ class BacktestEngine:
                         )
 
             if found:
-                # Ambil semua file yang cocok symbol-nya (biasanya
-                # cuma 1 file besar) — jangan dibatasi per-bulan.
                 files.extend(sorted(dict.fromkeys(found)))
 
         return sorted(
@@ -706,8 +621,6 @@ class BacktestEngine:
     ):
         """
         Backward-compatible function.
-
-        Mengembalikan file pertama yang ditemukan.
         """
 
         files = self.find_data_files(
@@ -719,7 +632,6 @@ class BacktestEngine:
         if files:
             return files[0]
 
-        # Try yearly files.
         clean_symbol = self._clean_symbol(
             raw_symbol
         )
@@ -745,6 +657,27 @@ class BacktestEngine:
     # DATA LOADING
     # ========================================================
 
+    def _load_data_file(self, path):
+        """
+        Membaca satu file CSV dan menormalisasi kolom.
+        """
+        if not os.path.exists(path):
+            return None
+
+        try:
+            df = pd.read_csv(
+                path,
+                sep=r",|\t|\s+",
+                engine="python"
+            )
+        except Exception:
+            df = pd.read_csv(path)
+
+        if df.empty:
+            return None
+
+        return self._standardize_dataframe(df)
+
     def load_tick_data(
         self,
         symbol,
@@ -753,24 +686,6 @@ class BacktestEngine:
     ):
         """
         Load broker data.
-
-        Support:
-
-            date + time
-
-        atau:
-
-            datetime
-
-        atau:
-
-            timestamp
-
-        dan:
-
-            open/high/low/close
-            bid/ask
-            last
         """
 
         start_dt = pd.to_datetime(
@@ -781,8 +696,6 @@ class BacktestEngine:
             end_date
         )
 
-        # Jika end_date berupa tanggal tanpa jam,
-        # gunakan sampai akhir hari.
         if len(str(end_date)) <= 10:
             end_dt = end_dt + pd.Timedelta(
                 days=1
@@ -796,8 +709,6 @@ class BacktestEngine:
             end_date
         )
 
-        # Jika monthly tidak ditemukan,
-        # coba yearly.
         if not files:
 
             years = sorted(
@@ -890,7 +801,6 @@ class BacktestEngine:
                 "datetime"
             )
 
-            # Remove duplicate timestamps.
             full_df = full_df.drop_duplicates(
                 subset=["datetime"],
                 keep="first"
@@ -909,80 +819,6 @@ class BacktestEngine:
         return full_df
 
     # ========================================================
-    # FILE READER
-    # ========================================================
-
-import os
-import pandas as pd
-import numpy as np
-
-def load_data(file_path: str) -> pd.DataFrame:
-    """
-    Membaca file data CSV 9-kolom MetaTrader dan melakukan normalisasi nama kolom
-    serta penggabungan kolom <DATE> dan <TIME> menjadi datetime index/column.
-    """
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"File data tidak ditemukan: {file_path}")
-
-    # 1. Deteksi separator (tab atau koma/spasi)
-    # File ekspor MetaTrader biasanya menggunakan Tab atau Koma
-    try:
-        df = pd.read_csv(file_path, sep=r'\s+|\t|,', engine='python')
-    except Exception:
-        df = pd.read_csv(file_path)
-
-    # 2. Clean nama kolom (hapus < > dan whitespace)
-    df.columns = [col.replace('<', '').replace('>', '').strip().lower() for col in df.columns]
-
-    # Mapping nama kolom MetaTrader -> standard engine
-    rename_map = {
-        'date': 'date',
-        'time': 'time',
-        'open': 'open',
-        'high': 'high',
-        'low': 'low',
-        'close': 'close',
-        'tickvol': 'tickvol',
-        'vol': 'volume',
-        'volume': 'volume',
-        'spread': 'spread'
-    }
-    df = df.rename(columns=rename_map)
-
-    # 3. Gabungkan DATE dan TIME menjadi kolom datetime
-    if 'date' in df.columns and 'time' in df.columns:
-        df['datetime'] = pd.to_datetime(df['date'].astype(str) + ' ' + df['time'].astype(str), errors='coerce')
-    elif 'date' in df.columns:
-        df['datetime'] = pd.to_datetime(df['date'], errors='coerce')
-
-    # Drop baris yang gagal di-parse tanggalnya
-    df = df.dropna(subset=['datetime'])
-    df = df.sort_values('datetime').reset_index(drop=True)
-
-    # 4. Pastikan tipe data numerik untuk harga
-    for col in ['open', 'high', 'low', 'close', 'tickvol', 'volume', 'spread']:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-
-    return df
-
-
-def parse_filename_info(filename: str) -> dict:
-    """
-    Ekstrak metadata dari nama file seperti XAUUSD_H1_202601020100_202608280200.csv
-    """
-    base_name = os.path.basename(filename).replace('.csv', '')
-    parts = base_name.split('_')
-    
-    info = {
-        "symbol": parts[0] if len(parts) > 0 else "UNKNOWN",
-        "timeframe": parts[1] if len(parts) > 1 else "H1",
-        "start_str": parts[2] if len(parts) > 2 else "",
-        "end_str": parts[3] if len(parts) > 3 else ""
-    }
-    return info
-    
-    # ========================================================
     # STANDARDIZE DATAFRAME
     # ========================================================
 
@@ -994,10 +830,6 @@ def parse_filename_info(filename: str) -> dict:
             return None
 
         df = df.copy()
-
-        # ====================================================
-        # TAB-SEPARATED SINGLE COLUMN
-        # ====================================================
 
         if (
             len(df.columns) == 1
@@ -1025,10 +857,6 @@ def parse_filename_info(filename: str) -> dict:
             )
 
             df.columns = columns
-
-        # ====================================================
-        # COLUMN NAME NORMALIZATION
-        # ====================================================
 
         rename = {}
 
@@ -1117,10 +945,6 @@ def parse_filename_info(filename: str) -> dict:
                 "tick_volume",
                 "tickvol"
             ]:
-                # Simpan terpisah dari "volume" supaya file broker
-                # (mis. export MT5) yang punya KEDUA kolom "Tick Volume"
-                # dan "Volume" sekaligus tidak bentrok jadi satu nama
-                # kolom duplikat (yang akan meledakkan pd.to_numeric).
                 rename[col] = "tick_volume"
 
             elif c in [
@@ -1135,20 +959,9 @@ def parse_filename_info(filename: str) -> dict:
             columns=rename
         )
 
-        # Jaga-jaga apabila tetap ada nama kolom duplikat (mis. dua
-        # kolom sumber berbeda kebetulan menghasilkan nama yang sama
-        # setelah normalisasi) — buang duplikat, pertahankan kolom
-        # pertama, supaya df[col] selalu mengembalikan Series (bukan
-        # DataFrame) di langkah numeric conversion berikutnya.
         if df.columns.duplicated().any():
             df = df.loc[:, ~df.columns.duplicated(keep="first")]
 
-        # ====================================================
-        # DATETIME
-        # ====================================================
-
-        # Kasus 1:
-        # date + time
         if (
             "date" in df.columns
             and "time" in df.columns
@@ -1177,8 +990,6 @@ def parse_filename_info(filename: str) -> dict:
                 errors="coerce"
             )
 
-            # Jika time ternyata sudah datetime
-            # atau format khusus.
             if parsed.isna().mean() > 0.5:
 
                 parsed = pd.to_datetime(
@@ -1188,8 +999,6 @@ def parse_filename_info(filename: str) -> dict:
 
             df["datetime"] = parsed
 
-        # Kasus 2:
-        # datetime langsung
         elif "time" in df.columns:
 
             df["datetime"] = pd.to_datetime(
@@ -1210,10 +1019,6 @@ def parse_filename_info(filename: str) -> dict:
                 df["date"],
                 errors="coerce"
             )
-
-        # ====================================================
-        # NUMERIC COLUMNS
-        # ====================================================
 
         numeric_columns = [
             "open",
@@ -1237,19 +1042,11 @@ def parse_filename_info(filename: str) -> dict:
                     errors="coerce"
                 )
 
-        # ====================================================
-        # DROP INVALID DATETIME
-        # ====================================================
-
         if "datetime" in df.columns:
 
             df = df[
                 df["datetime"].notna()
             ]
-
-        # ====================================================
-        # DROP ROW WITHOUT PRICE
-        # ====================================================
 
         price_columns = [
             c
@@ -1312,16 +1109,6 @@ def parse_filename_info(filename: str) -> dict:
         self,
         df
     ):
-        """
-        Untuk OHLC strategy gunakan close.
-
-        Priority:
-            close
-            last
-            bid
-            ask
-            open
-        """
 
         priority = [
             "close",
@@ -1398,8 +1185,6 @@ def parse_filename_info(filename: str) -> dict:
 
         try:
 
-            # AIExplainer versi baru idealnya
-            # menyediakan analyze_structured().
             if hasattr(
                 self.ai_explainer,
                 "analyze_structured"
@@ -1546,10 +1331,6 @@ def parse_filename_info(filename: str) -> dict:
             + (mql5_code or "")
         ).lower()
 
-        # ====================================================
-        # STRATEGY
-        # ====================================================
-
         strategy_patterns = [
             (
                 ["moving average", "ma crossover", "ema crossover"],
@@ -1618,12 +1399,7 @@ def parse_filename_info(filename: str) -> dict:
 
                 break
 
-        # ====================================================
-        # INDICATORS
-        # ====================================================
-
         indicator_map = {
-            "ima": "Moving Average",
             "ima": "Moving Average",
             "irsi": "RSI",
             "imacd": "MACD",
@@ -1649,10 +1425,6 @@ def parse_filename_info(filename: str) -> dict:
 
         if detected:
             logic["indicators"] = detected
-
-        # ====================================================
-        # INPUT EXTRACTION
-        # ====================================================
 
         def extract_number(
             names,
@@ -1741,10 +1513,6 @@ def parse_filename_info(filename: str) -> dict:
             "exit_rules"
         ]["breakeven"] = breakeven
 
-        # ====================================================
-        # LOT
-        # ====================================================
-
         lot = extract_number(
             [
                 "Lot",
@@ -1781,10 +1549,6 @@ def parse_filename_info(filename: str) -> dict:
                 "lot_management"
             ]["type"] = "martingale"
 
-        # ====================================================
-        # MAX POSITION
-        # ====================================================
-
         max_pos = extract_number(
             [
                 "MaxPositions",
@@ -1800,10 +1564,6 @@ def parse_filename_info(filename: str) -> dict:
         ]["max_positions"] = int(
             max_pos
         )
-
-        # ====================================================
-        # FAST / SLOW MA
-        # ====================================================
 
         fast_ma = extract_number(
             [
@@ -1829,10 +1589,6 @@ def parse_filename_info(filename: str) -> dict:
             "fast_ma": int(fast_ma),
             "slow_ma": int(slow_ma),
         }
-
-        # ====================================================
-        # RSI
-        # ====================================================
 
         rsi_period = extract_number(
             ["RSIPeriod", "RSI_Period"],
@@ -1865,10 +1621,6 @@ def parse_filename_info(filename: str) -> dict:
             "rsi_overbought": rsi_overbought,
         })
 
-        # ====================================================
-        # DETECT OPPOSITE SIGNAL
-        # ====================================================
-
         if (
             "opposite signal" in text
             or "reverse signal" in text
@@ -1879,10 +1631,6 @@ def parse_filename_info(filename: str) -> dict:
             logic[
                 "exit_rules"
             ]["opposite_signal"] = True
-
-        # ====================================================
-        # GRID
-        # ====================================================
 
         if "grid" in text:
 
@@ -1917,7 +1665,6 @@ def parse_filename_info(filename: str) -> dict:
         ):
             return base
 
-        # Recursive-ish shallow merge.
         for key, value in logic.items():
 
             if (
@@ -1959,10 +1706,6 @@ def parse_filename_info(filename: str) -> dict:
             "parameters",
             {}
         )
-
-        # ====================================================
-        # MA
-        # ====================================================
 
         fast_period = int(
             params.get(
@@ -2012,10 +1755,6 @@ def parse_filename_info(filename: str) -> dict:
             .mean()
         )
 
-        # ====================================================
-        # RSI
-        # ====================================================
-
         rsi_period = int(
             params.get(
                 "rsi_period",
@@ -2056,10 +1795,6 @@ def parse_filename_info(filename: str) -> dict:
             )
         )
 
-        # ====================================================
-        # MACD
-        # ====================================================
-
         ema12 = close.ewm(
             span=12,
             adjust=False
@@ -2087,10 +1822,6 @@ def parse_filename_info(filename: str) -> dict:
             data["macd"]
             - data["macd_signal"]
         )
-
-        # ====================================================
-        # BOLLINGER
-        # ====================================================
 
         bb_period = int(
             params.get(
@@ -2134,10 +1865,6 @@ def parse_filename_info(filename: str) -> dict:
             - bb_std * bb_sigma
         )
 
-        # ====================================================
-        # ATR
-        # ====================================================
-
         prev_close = close.shift(1)
 
         tr1 = (
@@ -2169,10 +1896,6 @@ def parse_filename_info(filename: str) -> dict:
             .rolling(14)
             .mean()
         )
-
-        # ====================================================
-        # STOCHASTIC
-        # ====================================================
 
         stoch_period = int(
             params.get(
@@ -2263,10 +1986,6 @@ def parse_filename_info(filename: str) -> dict:
             dtype=float
         )
 
-        # ====================================================
-        # MA CROSSOVER
-        # ====================================================
-
         if strategy in [
             "ma_crossover",
             "trend_following",
@@ -2310,10 +2029,6 @@ def parse_filename_info(filename: str) -> dict:
                 ):
 
                     signals[i] = -1
-
-        # ====================================================
-        # RSI
-        # ====================================================
 
         elif strategy == "rsi":
 
@@ -2363,10 +2078,6 @@ def parse_filename_info(filename: str) -> dict:
 
                     signals[i] = -1
 
-        # ====================================================
-        # MACD
-        # ====================================================
-
         elif strategy == "macd":
 
             macd = df[
@@ -2407,10 +2118,6 @@ def parse_filename_info(filename: str) -> dict:
 
                     signals[i] = -1
 
-        # ====================================================
-        # BOLLINGER
-        # ====================================================
-
         elif strategy == "bollinger":
 
             upper = df[
@@ -2434,10 +2141,6 @@ def parse_filename_info(filename: str) -> dict:
 
                 elif close[i] >= upper[i]:
                     signals[i] = -1
-
-        # ====================================================
-        # BREAKOUT
-        # ====================================================
 
         elif strategy in [
             "breakout",
@@ -2477,10 +2180,6 @@ def parse_filename_info(filename: str) -> dict:
 
                 elif close[i] < lowest:
                     signals[i] = -1
-
-        # ====================================================
-        # STOCHASTIC
-        # ====================================================
 
         elif strategy == "stochastic":
 
@@ -2526,20 +2225,10 @@ def parse_filename_info(filename: str) -> dict:
 
                     signals[i] = -1
 
-        # ====================================================
-        # GRID
-        # ====================================================
-
         elif strategy in [
             "grid",
             "martingale",
         ]:
-
-            # Grid membutuhkan aturan layer
-            # dari AI.
-            #
-            # Initial direction:
-            # MA crossover sebagai directional filter.
 
             fast = df[
                 "ma_fast"
@@ -2562,10 +2251,6 @@ def parse_filename_info(filename: str) -> dict:
 
                 elif fast[i] < slow[i]:
                     signals[i] = -1
-
-        # ====================================================
-        # ALLIGATOR
-        # ====================================================
 
         elif strategy == "alligator":
 
@@ -2629,10 +2314,6 @@ def parse_filename_info(filename: str) -> dict:
                 ):
 
                     signals[i] = -1
-
-        # ====================================================
-        # DEFAULT
-        # ====================================================
 
         else:
 
@@ -2722,7 +2403,6 @@ def parse_filename_info(filename: str) -> dict:
         if start <= end:
             return start <= hour < end
 
-        # Overnight session.
         return (
             hour >= start
             or hour < end
@@ -2953,19 +2633,6 @@ def parse_filename_info(filename: str) -> dict:
     ):
         """
         Simulasi exit menggunakan OHLC.
-
-        Conservative rule:
-
-        BUY:
-            cek SL dahulu apabila low <= SL
-            kemudian TP.
-
-        SELL:
-            cek SL dahulu apabila high >= SL
-            kemudian TP.
-
-        Ini sengaja konservatif ketika satu candle
-        menyentuh TP dan SL sekaligus.
         """
 
         direction = position[
@@ -2986,10 +2653,6 @@ def parse_filename_info(filename: str) -> dict:
 
         exit_price = None
         reason = None
-
-        # ====================================================
-        # UPDATE EXTREME
-        # ====================================================
 
         if direction == "BUY":
 
@@ -3012,10 +2675,6 @@ def parse_filename_info(filename: str) -> dict:
                 ],
                 low
             )
-
-        # ====================================================
-        # BREAK EVEN
-        # ====================================================
 
         be = float(
             risk_params.get(
@@ -3067,10 +2726,6 @@ def parse_filename_info(filename: str) -> dict:
                     position["sl"] = (
                         position["entry"]
                     )
-
-        # ====================================================
-        # TRAILING STOP
-        # ====================================================
 
         trailing = float(
             risk_params.get(
@@ -3130,10 +2785,6 @@ def parse_filename_info(filename: str) -> dict:
                         trailing_sl
                     )
 
-        # ====================================================
-        # STOP LOSS
-        # ====================================================
-
         if direction == "BUY":
 
             if (
@@ -3175,10 +2826,6 @@ def parse_filename_info(filename: str) -> dict:
                 float(exit_price),
                 reason
             )
-
-        # ====================================================
-        # TAKE PROFIT
-        # ====================================================
 
         if direction == "BUY":
 
@@ -3348,18 +2995,6 @@ def parse_filename_info(filename: str) -> dict:
     ):
         """
         Main backtest.
-
-        params contoh:
-
-        {
-            "ea_name": "TrendGridEA",
-            "symbol": "XAUUSD",
-            "start_date": "2024-01-01",
-            "end_date": "2024-12-31",
-            "balance": 10000,
-            "lot": 0.1,
-            "mql5_code": "..."
-        }
         """
 
         started_at = datetime.utcnow()
@@ -3411,10 +3046,6 @@ def parse_filename_info(filename: str) -> dict:
             ""
         )
 
-        # ====================================================
-        # START
-        # ====================================================
-
         print(
             "\n"
             "==================================================\n"
@@ -3443,10 +3074,6 @@ def parse_filename_info(filename: str) -> dict:
             5
         )
 
-        # ====================================================
-        # AI ANALYSIS
-        # ====================================================
-
         print(
             "[1/5] Analyzing EA with AI..."
         )
@@ -3471,10 +3098,6 @@ def parse_filename_info(filename: str) -> dict:
             "[AI] Indicators: "
             f"{trading_logic.get('indicators')}"
         )
-
-        # ====================================================
-        # DATA
-        # ====================================================
 
         print(
             "[2/5] Loading broker data..."
@@ -3518,7 +3141,6 @@ def parse_filename_info(filename: str) -> dict:
         )
 
         if df.empty:
-
             raise FileNotFoundError(
                 "\n"
                 f"File csv ditemukan tetapi "
@@ -3531,10 +3153,6 @@ def parse_filename_info(filename: str) -> dict:
             progress_callback,
             25
         )
-
-        # ====================================================
-        # VALIDATE
-        # ====================================================
 
         missing = (
             self._validate_ohlc(df)
@@ -3555,10 +3173,6 @@ def parse_filename_info(filename: str) -> dict:
                 "Kolom datetime gagal dibentuk "
                 "dari date + time."
             )
-
-        # ====================================================
-        # CLEAN
-        # ====================================================
 
         df = df.replace(
             [np.inf, -np.inf],
@@ -3582,10 +3196,6 @@ def parse_filename_info(filename: str) -> dict:
         df = df.reset_index(
             drop=True
         )
-
-        # ====================================================
-        # RAM SAFETY
-        # ====================================================
 
         max_rows = int(
             params.get(
@@ -3620,10 +3230,6 @@ def parse_filename_info(filename: str) -> dict:
             35
         )
 
-        # ====================================================
-        # INDICATORS
-        # ====================================================
-
         print(
             "[3/5] Calculating indicators..."
         )
@@ -3646,10 +3252,6 @@ def parse_filename_info(filename: str) -> dict:
             progress_callback,
             45
         )
-
-        # ====================================================
-        # SIMULATION
-        # ====================================================
 
         print(
             "[4/5] Running simulation..."
@@ -3682,15 +3284,6 @@ def parse_filename_info(filename: str) -> dict:
                 1
             )
         )
-
-        # ====================================================
-        # IMPORTANT:
-        # Untuk versi single-position:
-        # max_positions tetap dihormati.
-        #
-        # Untuk grid:
-        # multi-position sederhana didukung.
-        # ====================================================
 
         is_grid = (
             trading_logic.get(
@@ -3731,10 +3324,6 @@ def parse_filename_info(filename: str) -> dict:
 
         total_rows = len(df)
 
-        # ====================================================
-        # SIMULATION LOOP
-        # ====================================================
-
         for i in range(
             total_rows
         ):
@@ -3748,10 +3337,6 @@ def parse_filename_info(filename: str) -> dict:
             close_price = float(
                 row["close"]
             )
-
-            # -----------------------------------------------
-            # UPDATE EQUITY
-            # -----------------------------------------------
 
             floating_profit = 0.0
 
@@ -3809,10 +3394,6 @@ def parse_filename_info(filename: str) -> dict:
                 }
             )
 
-            # -----------------------------------------------
-            # CLOSE EXISTING POSITIONS
-            # -----------------------------------------------
-
             closed_positions = []
 
             for position in list(
@@ -3827,10 +3408,6 @@ def parse_filename_info(filename: str) -> dict:
                         risk_params
                     )
                 )
-
-                # -------------------------------------------
-                # OPPOSITE SIGNAL
-                # -------------------------------------------
 
                 if not should_close:
 
@@ -3899,10 +3476,6 @@ def parse_filename_info(filename: str) -> dict:
                         position
                     )
 
-                    # ---------------------------------------
-                    # MARTINGALE
-                    # ---------------------------------------
-
                     if (
                         trade["profit"] < 0
                         and
@@ -3948,10 +3521,6 @@ def parse_filename_info(filename: str) -> dict:
                         position
                     )
 
-            # -----------------------------------------------
-            # DAILY LOSS LIMIT
-            # -----------------------------------------------
-
             max_daily_loss = (
                 risk_management.get(
                     "max_daily_loss",
@@ -3959,9 +3528,6 @@ def parse_filename_info(filename: str) -> dict:
                 )
             )
 
-            # Implementasi sederhana:
-            # gunakan daily starting balance.
-            # Bisa diperluas pada analytics.
             if (
                 max_daily_loss is not None
                 and
@@ -3975,10 +3541,6 @@ def parse_filename_info(filename: str) -> dict:
                 )
             ):
                 continue
-
-            # -----------------------------------------------
-            # MAX DRAWDOWN LIMIT
-            # -----------------------------------------------
 
             max_dd_limit = (
                 risk_management.get(
@@ -3996,10 +3558,6 @@ def parse_filename_info(filename: str) -> dict:
                 )
             ):
                 continue
-
-            # -----------------------------------------------
-            # OPEN NEW POSITION
-            # -----------------------------------------------
 
             signal = int(
                 signals[i]
@@ -4037,10 +3595,6 @@ def parse_filename_info(filename: str) -> dict:
                     close_price
                 )
             )
-
-            # -----------------------------------------------
-            # SLIPPAGE
-            # -----------------------------------------------
 
             slippage_points = float(
                 params.get(
@@ -4080,10 +3634,6 @@ def parse_filename_info(filename: str) -> dict:
                     slippage
                 )
 
-            # -----------------------------------------------
-            # CREATE POSITION
-            # -----------------------------------------------
-
             position = self._create_position(
                 symbol_clean,
                 direction,
@@ -4096,10 +3646,6 @@ def parse_filename_info(filename: str) -> dict:
             positions.append(
                 position
             )
-
-            # -----------------------------------------------
-            # PROGRESS
-            # -----------------------------------------------
 
             if (
                 progress_callback
@@ -4131,10 +3677,6 @@ def parse_filename_info(filename: str) -> dict:
                     progress_callback,
                     percent
                 )
-
-        # ====================================================
-        # CLOSE REMAINING POSITIONS
-        # ====================================================
 
         if positions:
 
@@ -4185,10 +3727,6 @@ def parse_filename_info(filename: str) -> dict:
             95
         )
 
-        # ====================================================
-        # ANALYTICS
-        # ====================================================
-
         print(
             "[5/5] Calculating quantitative analytics..."
         )
@@ -4212,10 +3750,6 @@ def parse_filename_info(filename: str) -> dict:
             )
 
             metrics = {}
-
-        # ====================================================
-        # ENGINE METADATA
-        # ====================================================
 
         metrics[
             "engine_version"
@@ -4293,10 +3827,6 @@ def parse_filename_info(filename: str) -> dict:
             "params"
         ] = params
 
-        # ====================================================
-        # AI LOGIC RESULT
-        # ====================================================
-
         metrics[
             "ai_logic"
         ] = trading_logic
@@ -4312,10 +3842,6 @@ def parse_filename_info(filename: str) -> dict:
         ] = trading_logic.get(
             "indicators"
         )
-
-        # ====================================================
-        # EXECUTION INFO
-        # ====================================================
 
         finished_at = (
             datetime.utcnow()
@@ -4339,10 +3865,6 @@ def parse_filename_info(filename: str) -> dict:
             3
         )
 
-        # ====================================================
-        # SHEET SYNC
-        # ====================================================
-
         if params.get(
             "sync_sheet",
             True
@@ -4365,10 +3887,6 @@ def parse_filename_info(filename: str) -> dict:
                     "[SHEET] Sync error:"
                     f" {exc}"
                 )
-
-        # ====================================================
-        # FINAL
-        # ====================================================
 
         self._progress(
             progress_callback,
@@ -4413,21 +3931,6 @@ def parse_filename_info(filename: str) -> dict:
     ):
         """
         Backtest banyak EA.
-
-        Setiap EA memiliki source MQL5
-        dan parameter masing-masing.
-
-        Contoh:
-
-        [
-            {
-                "ea_name": "EA 01",
-                "symbol": "XAUUSD",
-                "year": 2024,
-                "mql5_code": "..."
-            },
-            ...
-        ]
         """
 
         results = []
@@ -4524,94 +4027,7 @@ def parse_filename_info(filename: str) -> dict:
 
         return results
 
-# ========================================================
-    # DATA LOADER & EXECUTION
-    # ========================================================
 
-    def load_data(self, file_path=None, start_date=None, end_date=None):
-        path = file_path or getattr(self, 'default_file_path', None)
-        
-        if not path or not os.path.exists(path):
-            csv_files = glob.glob(os.path.join(self.tick_data_dir, "*.csv"))
-            if csv_files:
-                path = csv_files[0]
-            else:
-                raise FileNotFoundError(f"File data CSV tidak ditemukan di {self.tick_data_dir}")
-
-        df = pd.read_csv(path)
-        df.columns = [c.strip().lower() for c in df.columns]
-
-        # Standardize Datetime column
-        if 'date' in df.columns and 'time' in df.columns:
-            df['datetime'] = pd.to_datetime(df['date'].astype(str) + ' ' + df['time'].astype(str))
-        elif 'datetime' in df.columns:
-            df['datetime'] = pd.to_datetime(df['datetime'])
-        elif '<date>' in df.columns and '<time>' in df.columns:
-            df['datetime'] = pd.to_datetime(df['<date>'].astype(str) + ' ' + df['<time>'].astype(str))
-
-        if 'datetime' in df.columns:
-            df.sort_values('datetime', inplace=True)
-            if start_date:
-                df = df[df['datetime'] >= pd.to_datetime(start_date)]
-            if end_date:
-                df = df[df['datetime'] <= pd.to_datetime(end_date)]
-
-        return df
-
-    def run_backtest(
-        self,
-        mql5_code="",
-        code="",
-        file_path=None,
-        data_path=None,
-        initial_balance=10000.0,
-        start_date=None,
-        end_date=None,
-        progress_callback=None,
-        **kwargs
-    ):
-        raw_code = mql5_code or code
-        path = file_path or data_path or getattr(self, 'default_file_path', None)
-
-        self._progress(progress_callback, 10)
-        df = self.load_data(file_path=path, start_date=start_date, end_date=end_date)
-        
-        self._progress(progress_callback, 40)
-
-        balance = float(initial_balance)
-        trades = []
-        equity_curve = []
-
-        close_prices = df['close'].values if 'close' in df.columns else (df['bid'].values if 'bid' in df.columns else df.iloc[:, 1].values)
-        dates = df['datetime'].dt.strftime('%Y-%m-%d %H:%M:%S').values if 'datetime' in df.columns else range(len(df))
-
-        for i in range(len(close_prices)):
-            price = close_prices[i]
-            t = dates[i]
-            equity_curve.append({"time": str(t), "equity": balance})
-
-        self._progress(progress_callback, 90)
-
-        stats = {
-            "net_profit": 0.0,
-            "profit_factor": "0.00",
-            "sortino_ratio": "0.00",
-            "max_drawdown_pct": 0.0,
-            "total_trades": 0,
-            "win_rate": 0.0,
-            "trades": trades,
-            "equity_curve": equity_curve
-        }
-
-        self._progress(progress_callback, 100)
-        return stats
-
-    def run(self, *args, **kwargs):
-        return self.run_backtest(*args, **kwargs)
-
-    def execute(self, *args, **kwargs):
-        return self.run_backtest(*args, **kwargs)
-    
 # ============================================================
 # DIRECT TEST
 # ============================================================
