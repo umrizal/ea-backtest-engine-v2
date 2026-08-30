@@ -398,9 +398,7 @@ def run_backtest():
     try:
         data = request.json or {}
         
-        # Menerima baik 'code' maupun 'mql5_code' dari payload JS
         mql5_code = data.get('code') or data.get('mql5_code', '')
-
         if not mql5_code or not str(mql5_code).strip():
             return jsonify({
                 "success": False,
@@ -408,15 +406,24 @@ def run_backtest():
             }), 400
 
         data_file = data.get('data_file') or data.get('symbol', '')
-        if not data_file.endswith('.csv'):
-            data_file = "XAUUSD_H1_202601020100_202608280200.csv"
+        if not str(data_file).endswith('.csv'):
+            data_file = "XAUUSD_H1_202601020100_202608280200.csv"[cite: 1]
 
         data_path = os.path.join(os.path.dirname(__file__), 'data', data_file)
 
-        # Inisialisasi Engine dan Jalankan Backtest
-        engine = BacktestEngine(data_path=data_path)
+        # Inisialisasi Engine tanpa keyword argument data_path yang tidak didukung
+        try:
+            engine = BacktestEngine(data_file=data_path)
+        except TypeError:
+            try:
+                engine = BacktestEngine(csv_path=data_path)
+            except TypeError:
+                engine = BacktestEngine()  # Jika __init__ tidak menerima argumen path
+
+        # Jalankan Backtest
         results = engine.run(
             mql5_code=mql5_code,
+            data_path=data_path,
             initial_balance=float(data.get('initial_balance') or data.get('balance') or 10000),
             start_date=data.get('start_date'),
             end_date=data.get('end_date')
