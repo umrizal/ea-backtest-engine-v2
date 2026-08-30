@@ -646,6 +646,48 @@ def run_backtest():
     }), 200
 
 
+@app.route('/chart_data/<session_id>')
+def chart_data(session_id):
+    """
+    Return chart data dengan marking entry Buy/Sell dan profit/loss.
+    """
+    from flask import jsonify
+    
+    if session_id not in JOBS:
+        return jsonify({"error": "Session not found"}), 404
+    
+    session = JOBS[session_id]
+    result = session.get('result', {})
+    
+    equity_curve = result.get('equity_curve', [])
+    trades = result.get('trades', [])
+    
+    # Extract OHLC dari data (jika tersedia)
+    # Atau gunakan equity curve sebagai baseline
+    
+    chart_data = {
+        "equity_curve": equity_curve,
+        "trades": trades,
+        "markers": []
+    }
+    
+    # Buat markers untuk setiap trade
+    for trade in trades:
+        marker = {
+            "time": trade.get("close_time", ""),
+            "entry_time": trade.get("open_time", ""),
+            "direction": trade.get("direction", ""),
+            "entry_price": trade.get("entry_price", 0),
+            "close_price": trade.get("close_price", 0),
+            "profit": trade.get("profit", 0),
+            "lot": trade.get("lot", 0),
+            "symbol": trade.get("symbol", ""),
+            "comment": trade.get("comment", ""),
+        }
+        chart_data["markers"].append(marker)
+    
+    return jsonify(chart_data)
+
 # ============================================================
 # BACKTEST STATUS
 # ============================================================

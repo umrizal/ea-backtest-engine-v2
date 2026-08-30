@@ -234,6 +234,102 @@
       </div>
     </div>
 
+<div id="chart-container" style="width:100%; height:600px;"></div>
+
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script>
+
+function renderChartWithMarkers(sessionId) {
+    fetch(`/chart_data/${sessionId}`)
+        .then(res => res.json())
+        .then(data => {
+            const equityCurve = data.equity_curve;
+            const trades = data.trades;
+            
+            // Extract time dan equity
+            const times = equityCurve.map(p => p.time);
+            const equities = equityCurve.map(p => p.equity);
+            
+            // Buat trace untuk equity curve
+            const equityTrace = {
+                x: times,
+                y: equities,
+                type: 'scatter',
+                mode: 'lines',
+                name: 'Equity',
+                line: {color: '#2196F3', width: 2}
+            };
+            
+            // Buat markers untuk Buy entries
+            const buyMarkers = {
+                x: [],
+                y: [],
+                mode: 'markers',
+                type: 'scatter',
+                name: 'Buy',
+                marker: {
+                    symbol: 'triangle-up',
+                    size: 12,
+                    color: '#4CAF50'
+                },
+                text: [],
+                hoverinfo: 'text'
+            };
+            
+            // Buat markers untuk Sell entries
+            const sellMarkers = {
+                x: [],
+                y: [],
+                mode: 'markers',
+                type: 'scatter',
+                name: 'Sell',
+                marker: {
+                    symbol: 'triangle-down',
+                    size: 12,
+                    color: '#F44336'
+                },
+                text: [],
+                hoverinfo: 'text'
+            };
+            
+            // Populate markers dari trades
+            trades.forEach(trade => {
+                const entryTime = trade.open_time;
+                const closeTime = trade.close_time;
+                const profit = trade.profit;
+                const direction = trade.direction;
+                const lot = trade.lot;
+                
+                // Cari equity pada saat entry
+                const entryIndex = times.findIndex(t => t >= entryTime);
+                const entryEquity = entryIndex >= 0 ? equities[entryIndex] : 0;
+                
+                const markerText = `${direction} ${lot} lot<br>Profit: $${profit.toFixed(2)}<br>${closeTime}`;
+                
+                if (direction === 'BUY') {
+                    buyMarkers.x.push(entryTime);
+                    buyMarkers.y.push(entryEquity);
+                    buyMarkers.text.push(markerText);
+                } else {
+                    sellMarkers.x.push(entryTime);
+                    sellMarkers.y.push(entryEquity);
+                    sellMarkers.text.push(markerText);
+                }
+            });
+            
+            const layout = {
+                title: 'Equity Curve dengan Entry Markers',
+                xaxis: {title: 'Time'},
+                yaxis: {title: 'Equity ($)'},
+                hovermode: 'closest',
+                showlegend: true
+            };
+            
+            Plotly.newPlot('chart-container', [equityTrace, buyMarkers, sellMarkers], layout);
+        });
+}
+</script>
+
     <!-- VIEW FULL REPORT -->
     <div id="view-fullreport" class="view">
       <div class="card">
@@ -868,5 +964,71 @@ function buildBacktestPayload() {
     `;
   }
 </script>
+
+<div style="margin-top: 40px;">
+    <h3>Trading History</h3>
+    <div style="overflow-x: auto;">
+        <table id="trading-history" style="width:100%; border-collapse: collapse; font-size: 13px;">
+            <thead>
+                <tr style="background: #f5f5f5;">
+                    <th style="padding: 8px; border: 1px solid #ddd;">No</th>
+                    <th style="padding: 8px; border: 1px solid #ddd;">Time Open</th>
+                    <th style="padding: 8px; border: 1px solid #ddd;">Time Close</th>
+                    <th style="padding: 8px; border: 1px solid #ddd;">Type</th>
+                    <th style="padding: 8px; border: 1px solid #ddd;">Symbol</th>
+                    <th style="padding: 8px; border: 1px solid #ddd;">Lot</th>
+                    <th style="padding: 8px; border: 1px solid #ddd;">Entry Price</th>
+                    <th style="padding: 8px; border: 1px solid #ddd;">Close Price</th>
+                    <th style="padding: 8px; border: 1px solid #ddd;">Profit/Loss</th>
+                    <th style="padding: 8px; border: 1px solid #ddd;">Balance</th>
+                    <th style="padding: 8px; border: 1px solid #ddd;">Comment</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Data akan diisi via JavaScript -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function renderTradingHistory(sessionId) {
+    fetch(`/chart_data/${sessionId}`)
+        .then(res => res.json())
+        .then(data => {
+            const trades = data.trades;
+            const tbody = document.querySelector('#trading-history tbody');
+            tbody.innerHTML = '';
+
+            trades.forEach((trade, index) => {
+                const tr = document.createElement('tr');
+
+                const profit = trade.profit || 0;
+                const profitStyle = profit >= 0 ? 'color: #4CAF50;' : 'color: #F44336;';
+
+                tr.innerHTML = `
+                    <td style="padding: 6px; border: 1px solid #ddd; text-align: center;">${index + 1}</td>
+                    <td style="padding: 6px; border: 1px solid #ddd;">${trade.open_time || '-'}</td>
+                    <td style="padding: 6px; border: 1px solid #ddd;">${trade.close_time || '-'}</td>
+                    <td style="padding: 6px; border: 1px solid #ddd; text-align: center; font-weight: bold; ${trade.direction === 'BUY' ? 'color: #4CAF50;' : 'color: #F44336;'}">${trade.direction || '-'}</td>
+                    <td style="padding: 6px; border: 1px solid #ddd; text-align: center;">${trade.symbol || '-'}</td>
+                    <td style="padding: 6px; border: 1px solid #ddd; text-align: center;">${trade.lot || 0}</td>
+                    <td style="padding: 6px; border: 1px solid #ddd; text-align: right;">${(trade.entry_price || 0).toFixed(5)}</td>
+                    <td style="padding: 6px; border: 1px solid #ddd; text-align: right;">${(trade.close_price || 0).toFixed(5)}</td>
+                    <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-weight: bold; ${profitStyle}">$${profit.toFixed(2)}</td>
+                    <td style="padding: 6px; border: 1px solid #ddd; text-align: right;">${(trade.balance || 0).toFixed(2)}</td>
+                    <td style="padding: 6px; border: 1px solid #ddd;">${trade.comment || '-'}</td>
+                `;
+
+                tbody.appendChild(tr);
+            });
+        });
+}
+</script>
+
+<style>
+.profit { color: #4CAF50; }
+.loss { color: #F44336; }
+</style>
 </body>
 </html>

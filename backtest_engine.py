@@ -3920,6 +3920,384 @@ class BacktestEngine:
 
         return metrics
 
+        # ====================================================
+        # SIMULATION LOOP
+        # ====================================================
+
+        for i in range(
+            total_rows
+        ):
+
+            row = df.iloc[i]
+
+            timestamp = row[
+                "datetime"
+            ]
+
+            close_price = float(
+                row["close"]
+            )
+
+            # -----------------------------------------------
+            # AUTO-STOP: BALANCE = 0
+            # -----------------------------------------------
+
+            if balance <= 0:
+                print(
+                    f"[STOP] Balance = {balance:,.2f} (Stop Out) "
+                    f"at {timestamp}"
+                )
+                break
+
+            # -----------------------------------------------
+            # UPDATE EQUITY
+            # -----------------------------------------------
+
+            floating_profit = 0.0
+
+            for position in positions:
+
+                floating_profit += (
+                    self._calculate_profit(
+                        symbol_clean,
+                        position[
+                            "direction"
+                        ],
+                        position[
+                            "entry"
+                        ],
+                        close_price,
+                        position[
+                            "lot"
+                        ]
+                    )
+                )
+
+            equity = (
+                balance
+                + floating_profit
+            )
+
+            if equity > max_equity:
+                max_equity = equity
+
+            if max_equity > 0:
+
+                dd = (
+                    (
+                        max_equity
+                        - equity
+                    )
+                    / max_equity
+                    * 100
+                )
+
+                max_drawdown = max(
+                    max_drawdown,
+                    dd
+                )
+
+            equity_curve.append(
+                {
+                    "time": str(
+                        timestamp
+                    ),
+                    "equity": round(
+                        equity,
+                        2
+                    ),
+                    "balance": round(
+                        balance,
+                        2
+                    ),
+                }
+            )
+
+            # -----------------------------------------------
+            # CLOSE EXISTING POSITIONS
+            # -----------------------------------------------
+
+            closed_positions = []
+
+            for position in list(
+                positions
+            ):
+
+                should_close, exit_price, reason = (
+                    self._check_position_exit(
+                        position,
+                        row,
+                        symbol_clean,
+                        risk_params
+                    )
+                )
+
+                # -------------------------------------------
+                # OPPOSITE SIGNAL
+                # -------------------------------------------
+
+                if not should_close:
+
+                    opposite = (
+                        (
+                            position[
+                                "direction"
+                            ] == "BUY"
+                            and
+                            signals[i] == -1
+                        )
+                        or
+                        (
+                            position[
+                                "direction"
+                            ] == "SELL"
+                            and
+                            signals[i] == 1
+                        )
+                    )
+
+                    if (
+                        opposite
+                        and
+                        risk_params.get(
+                            "opposite_signal",
+                            False
+                        )
+                    ):
+
+                        exit_price = (
+                            self._exit_price(
+                                row,
+                                position[
+                                    "direction"
+                                ],
+                                close_price
+                            )
+                        )
+
+                        should_close = True
+
+                        reason = (
+                            "Opposite Signal"
+                        )
+
+                if should_close:
+
+                    balance, trade = (
+                        self._close_position(
+                            position,
+                            exit_price,
+                            timestamp,
+                            symbol_clean,
+                            reason,
+                            balance,
+                            params,
+                        )
+                    )
+
+                    trades.append(
+                        trade
+                    )
+
+                    closed_positions.append(
+                        position
+                    )
+
+                    # ---------------------------------------
+                    # MARTINGALE
+                    # ---------------------------------------
+
+                    if (
+                        trade["profit"] < 0
+                        and
+                        lot_management.get(
+                            "martingale",
+                            False
+                        )
+                    ):
+
+                        multiplier = float(
+                            lot_management.get(
+                                "multiplier",
+                                1.0
+                            )
+                        )
+
+                        current_lot *= (
+                            multiplier
+                        )
+
+                        max_lot = float(
+                            lot_management.get(
+                                "max_lot",
+                                100.0
+                            )
+                        )
+
+                        current_lot = min(
+                            current_lot,
+                            max_lot
+                        )
+
+                    else:
+
+                        current_lot = (
+                            base_lot
+                        )
+
+            for position in closed_positions:
+
+                if position in positions:
+                    positions.remove(
+                        position
+                    )
+
+            # -----------------------------------------------
+            # DAILY LOSS LIMIT
+            # -----------------------------------------------
+
+            max_daily_loss = (
+                risk_management.get(
+                    "max_daily_loss",
+                    None
+                )
+            )
+
+            if (
+                max_daily_loss is not None
+                and
+                equity
+                <= initial_balance
+                * (
+                    1
+                    - float(
+                        max_daily_loss
+                    ) / 100
+                )
+            ):
+                continue
+
+            # -----------------------------------------------
+            # MAX DRAWDOWN LIMIT
+            # -----------------------------------------------
+
+            max_dd_limit = (
+                risk_management.get(
+                    "max_drawdown",
+                    None
+                )
+            )
+
+            if (
+                max_dd_limit is not None
+                and
+                max_drawdown
+                >= float(
+                    max_dd_limit
+                )
+            ):
+                continue
+
+            # -----------------------------------------------
+            # OPEN NEW POSITION
+            # -----------------------------------------------
+
+            signal = int(
+                signals[i]
+            )
+
+            if signal == 0:
+                continue
+
+            if not self._time_allowed(
+                timestamp,
+                trading_logic
+            ):
+                continue
+
+            if not self._spread_allowed(
+                row,
+                trading_logic,
+                symbol_clean
+            ):
+                continue
+
+            if len(positions) >= max_positions:
+                continue
+
+            direction = (
+                "BUY"
+                if signal == 1
+                else "SELL"
+            )
+
+            entry_price = (
+                self._entry_price(
+                    row,
+                    direction,
+                    close_price
+                )
+            )
+
+            # -----------------------------------------------
+            # SLIPPAGE
+            # -----------------------------------------------
+
+            slippage_points = float(
+                params.get(
+                    "slippage_points",
+                    trading_logic
+                    .get(
+                        "execution",
+                        {}
+                    )
+                    .get(
+                        "slippage_points",
+                        0
+                    )
+                )
+            )
+
+            point = float(
+                params.get(
+                    "point_size",
+                    self._get_point_size(
+                        symbol_clean
+                    )
+                )
+            )
+
+            slippage = (
+                slippage_points
+                * point
+            )
+
+            if direction == "BUY":
+                entry_price += (
+                    slippage
+                )
+            else:
+                entry_price -= (
+                    slippage
+                )
+
+            # -----------------------------------------------
+            # CREATE POSITION
+            # -----------------------------------------------
+
+            position = self._create_position(
+                symbol_clean,
+                direction,
+                entry_price,
+                timestamp,
+                current_lot,
+                risk_params
+            )
+
+            positions.append(
+                position
+            )
+
     # ========================================================
     # BATCH BACKTEST
     # ========================================================
