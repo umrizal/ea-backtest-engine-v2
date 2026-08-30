@@ -411,23 +411,44 @@ def run_backtest():
 
         data_path = os.path.join(os.path.dirname(__file__), 'data', data_file)
 
-        # Inisialisasi Engine tanpa keyword argument data_path yang tidak didukung
+        # Inisialisasi Engine
         try:
-            engine = BacktestEngine(data_file=data_path)
+            engine = BacktestEngine(data_path)
         except TypeError:
             try:
-                engine = BacktestEngine(csv_path=data_path)
+                engine = BacktestEngine(data_file=data_path)
             except TypeError:
-                engine = BacktestEngine()  # Jika __init__ tidak menerima argumen path
+                engine = BacktestEngine()
 
-        # Jalankan Backtest
-        results = engine.run(
-            mql5_code=mql5_code,
-            data_path=data_path,
-            initial_balance=float(data.get('initial_balance') or data.get('balance') or 10000),
-            start_date=data.get('start_date'),
-            end_date=data.get('end_date')
-        )
+        # Parameter untuk Backtest
+        kwargs = {
+            "mql5_code": mql5_code,
+            "code": mql5_code,
+            "data_path": data_path,
+            "initial_balance": float(data.get('initial_balance') or data.get('balance') or 10000),
+            "start_date": data.get('start_date'),
+            "end_date": data.get('end_date')
+        }
+
+        # Deteksi otomatis nama method eksekusi pada BacktestEngine
+        run_method = None
+        for method_name in ['run_backtest', 'run', 'execute', 'start', 'backtest']:
+            if hasattr(engine, method_name) and callable(getattr(engine, method_name)):
+                run_method = getattr(engine, method_name)
+                break
+
+        if not run_method:
+            return jsonify({
+                "success": False,
+                "error": "Tidak dapat menemukan method eksekusi pada BacktestEngine."
+            }), 500
+
+        # Eksekusi dengan menyesuaikan argumen yang diterima method
+        import inspect
+        sig = inspect.signature(run_method)
+        valid_kwargs = {k: v for k, v in kwargs.items() if k in sig.parameters}
+
+        results = run_method(**valid_kwargs)
 
         return jsonify({
             "success": True,
