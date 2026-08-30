@@ -29,7 +29,6 @@ import numpy as np
 from ai_explainer import AIExplainer
 from analytics import QuantitativeAnalytics
 from sheet_sync import SheetSyncManager
-from backtest_engine import BacktestEngine
 
 
 class BacktestEngine:
