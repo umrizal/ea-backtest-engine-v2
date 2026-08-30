@@ -86,7 +86,7 @@ class BacktestEngine:
     # INITIALIZATION
     # ========================================================
 
-def __init__(
+    def __init__(
         self,
         tick_data_dir="data",
         sheet_sync=None,
@@ -110,7 +110,7 @@ def __init__(
         )
 
         self._ai_analysis_cache = {}
-        
+
         # ====================================================
         # STANDARD SYMBOL MAP
         # ====================================================
