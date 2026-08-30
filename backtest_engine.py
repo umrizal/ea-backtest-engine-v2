@@ -86,7 +86,7 @@ class BacktestEngine:
     # INITIALIZATION
     # ========================================================
 
-    def __init__(
+def __init__(
         self,
         tick_data_dir="data",
         sheet_sync=None,
@@ -94,7 +94,8 @@ class BacktestEngine:
     ):
         self.tick_data_dir = os.path.abspath(tick_data_dir)
 
-        os.makedirs(folder_path, exist_ok=True)
+        # PERBAIKAN: Gunakan self.tick_data_dir menggantikan folder_path
+        os.makedirs(self.tick_data_dir, exist_ok=True)
 
         self.sheet_sync = (
             sheet_sync
@@ -109,7 +110,7 @@ class BacktestEngine:
         )
 
         self._ai_analysis_cache = {}
-
+        
         # ====================================================
         # STANDARD SYMBOL MAP
         # ====================================================
