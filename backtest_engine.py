@@ -225,53 +225,53 @@ class BacktestEngine:
                     variant.upper()
                 ] = standard
 
-def run_backtest(
-        self,
-        mql5_code="",
-        code="",
-        file_path=None,
-        data_path=None,
-        initial_balance=10000.0,
-        start_date=None,
-        end_date=None,
-        progress_callback=None,
-        **kwargs
-    ):
-        raw_code = mql5_code or code
-        path = file_path or data_path or getattr(self, 'default_file_path', None)
+    def run_backtest(
+            self,
+            mql5_code="",
+            code="",
+            file_path=None,
+            data_path=None,
+            initial_balance=10000.0,
+            start_date=None,
+            end_date=None,
+            progress_callback=None,
+            **kwargs
+        ):
+            raw_code = mql5_code or code
+            path = file_path or data_path or getattr(self, 'default_file_path', None)
 
-        self._progress(progress_callback, 10)
-        df = self.load_data(file_path=path, start_date=start_date, end_date=end_date)
-        
-        self._progress(progress_callback, 40)
+            self._progress(progress_callback, 10)
+            df = self.load_data(file_path=path, start_date=start_date, end_date=end_date)
 
-        balance = float(initial_balance)
-        trades = []
-        equity_curve = []
+            self._progress(progress_callback, 40)
 
-        close_prices = df['close'].values if 'close' in df.columns else df['bid'].values
-        dates = df['datetime'].dt.strftime('%Y-%m-%d %H:%M:%S').values if 'datetime' in df.columns else range(len(df))
+            balance = float(initial_balance)
+            trades = []
+            equity_curve = []
 
-        for i in range(len(close_prices)):
-            price = close_prices[i]
-            t = dates[i]
-            equity_curve.append({"time": str(t), "equity": balance})
+            close_prices = df['close'].values if 'close' in df.columns else df['bid'].values
+            dates = df['datetime'].dt.strftime('%Y-%m-%d %H:%M:%S').values if 'datetime' in df.columns else range(len(df))
 
-        self._progress(progress_callback, 90)
+            for i in range(len(close_prices)):
+                price = close_prices[i]
+                t = dates[i]
+                equity_curve.append({"time": str(t), "equity": balance})
 
-        stats = {
-            "net_profit": 0.0,
-            "profit_factor": "0.00",
-            "sortino_ratio": "0.00",
-            "max_drawdown_pct": 0.0,
-            "total_trades": 0,
-            "win_rate": 0.0,
-            "trades": trades,
-            "equity_curve": equity_curve
-        }
+            self._progress(progress_callback, 90)
 
-        self._progress(progress_callback, 100)
-        return stats
+            stats = {
+                "net_profit": 0.0,
+                "profit_factor": "0.00",
+                "sortino_ratio": "0.00",
+                "max_drawdown_pct": 0.0,
+                "total_trades": 0,
+                "win_rate": 0.0,
+                "trades": trades,
+                "equity_curve": equity_curve
+            }
+
+            self._progress(progress_callback, 100)
+            return stats
 
     def run(self, *args, **kwargs):
         return self.run_backtest(*args, **kwargs)
