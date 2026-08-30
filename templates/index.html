@@ -424,15 +424,19 @@
     }
   }
 
-  function buildBacktestPayload() {
+function buildBacktestPayload() {
+    // Ambil isi textarea kode MQL5
+    const codeVal = (document.getElementById('mql5CodeInput') || document.getElementById('mql5Code')).value;
+
     return {
-      code: document.getElementById('mql5CodeInput').value,
+      code: codeVal,
+      mql5_code: codeVal,
       ea_name: document.getElementById('eaName').value || "Default_EA",
-      data_file: document.getElementById('dataSelect').value,
+      data_file: document.getElementById('dataSelect') ? document.getElementById('dataSelect').value : "XAUUSD_H1_202601020100_202608280200.csv",
       start_date: document.getElementById('startDate').value,
       end_date: document.getElementById('endDate').value,
-      timeframe: document.getElementById('timeframeSelect').value,
-      initial_balance: parseFloat(document.getElementById('balance').value || 10000)
+      timeframe: document.getElementById('timeframeSelect') ? document.getElementById('timeframeSelect').value : "H1",
+      initial_balance: parseFloat((document.getElementById('balance') || document.getElementById('initialBalance')).value || 10000)
     };
   }
 
