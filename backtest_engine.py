@@ -89,12 +89,23 @@ class BacktestEngine:
     def __init__(
         self,
         tick_data_dir="data",
+        file_path=None,
+        data_path=None,
+        csv_path=None,
         sheet_sync=None,
         ai_explainer=None,
     ):
-        self.tick_data_dir = os.path.abspath(tick_data_dir)
+        # Memilih path direktori atau file data secara fleksibel
+        target_path = file_path or data_path or csv_path or tick_data_dir
+        
+        if os.path.isfile(target_path):
+            self.tick_data_dir = os.path.abspath(os.path.dirname(target_path))
+            self.default_file_path = os.path.abspath(target_path)
+        else:
+            self.tick_data_dir = os.path.abspath(target_path)
+            self.default_file_path = None
 
-        # PERBAIKAN: Gunakan self.tick_data_dir menggantikan folder_path
+        # Aman dari error Errno 17
         os.makedirs(self.tick_data_dir, exist_ok=True)
 
         self.sheet_sync = (
