@@ -59,7 +59,7 @@
     .badge.yellow { background: rgba(245, 158, 11, 0.15); color: var(--yellow); border: 1px solid var(--yellow); }
     .view { display: none; }
     .view.active { display: block; }
-    .ai-box { background: #070c14; border: 1px solid #1e293b; padding: 12px; border-radius: 6px; color: #94a3b8; font-family: var(--font-mono); font-size: 11px; white-space: pre-line; margin-top: 10px; }
+    .ai-box { background: #070c14; border: 1px solid #1e293b; padding: 12px; border-radius: 6px; color: #94a3b8; font-family: var(--font-mono); font-size: 11px; white-space: pre-wrap; margin-top: 10px; max-height: 400px; overflow-y: auto; }
     .sim-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
     .sim-toolbar input[type="range"] { accent-color: var(--gold); }
   </style>
@@ -85,7 +85,7 @@
     <div class="topbar">
       <div class="page-title">
         <h2>Pintarin Laboratorium EA v3.0</h2>
-        <p>Enterprise Quantitative Platform & MQL5 Transpiler Engine</p>
+        <p>Enterprise Quantitative Platform & MQL5 Engine</p>
       </div>
       <div class="actions">
         <button class="btn" onclick="fetchHistoryData()">🔄 Reload Histori DB</button>
@@ -93,10 +93,11 @@
       </div>
     </div>
 
+    <!-- VIEW BACKTEST TERMINAL -->
     <div id="view-backtest" class="view active">
       <div class="grid-control">
         <div class="card">
-          <h3>⚙️ Backtest & Transpiler Control</h3>
+          <h3>⚙️ Backtest Control</h3>
           
           <div class="form-group">
             <label>📁 UPLOAD FILE EA (.MQ5 / .EX5)</label>
@@ -109,19 +110,7 @@
 
           <div class="form-group">
             <label>📝 PASTE KODE MQL5 RAW (.MQ5)</label>
-            <textarea id="mql5CodeInput" rows="7" placeholder="// Paste kode EA MQL5 Anda di sini...
-input double TakeProfit = 50.0;
-input double StopLoss = 30.0;
-input double TrailingStop = 15.0;
-input double BreakEven = 10.0;
-input int FastMA = 10;
-input int SlowMA = 30;
-
-void OnTick() {
-    double ma1 = iMA(_Symbol, _Period, FastMA, 0, MODE_SMA, PRICE_CLOSE);
-    double ma2 = iMA(_Symbol, _Period, SlowMA, 0, MODE_SMA, PRICE_CLOSE);
-    if(ma1 > ma2) OrderSend(... BUY ...);
-}"></textarea>
+            <textarea id="mql5CodeInput" rows="7" placeholder="// Paste kode EA MQL5 Anda di sini..."></textarea>
           </div>
 
           <div style="display: flex; gap: 10px;">
@@ -134,27 +123,43 @@ void OnTick() {
           </div>
 
           <div class="form-group">
-            <label>📅 Tanggal Mulai</label>
-            <input type="date" id="startDate" value="2026-01-02">
+            <label>📁 FILE DATA (CSV)</label>
+            <select id="dataSelect">
+              <option value="">-- Memuat File Data --</option>
+            </select>
           </div>
 
-          <div class="form-group">
-            <label>📅 Tanggal Selesai</label>
-            <input type="date" id="endDate" value="2026-08-28">
-          </div>
-          
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="form-group">
+              <label>⏱️ TIMEFRAME</label>
+              <select id="timeframeSelect">
+                <option value="M1">M1</option>
+                <option value="M5">M5</option>
+                <option value="M15">M15</option>
+                <option value="M30">M30</option>
+                <option value="H1" selected>H1</option>
+                <option value="H4">H4</option>
+                <option value="D1">D1</option>
+              </select>
+            </div>
             <div class="form-group">
               <label>Modal Awal ($)</label>
               <input type="number" id="balance" value="10000">
             </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="form-group">
-              <label>Lot Size</label>
-              <input type="number" id="lot" step="0.01" value="0.1">
+              <label>📅 Tanggal Mulai</label>
+              <input type="date" id="startDate" value="2026-01-02">
+            </div>
+            <div class="form-group">
+              <label>📅 Tanggal Selesai</label>
+              <input type="date" id="endDate" value="2026-08-28">
             </div>
           </div>
 
-          <button class="btn primary" id="btnRun" style="width: 100%; margin-top: 10px;" onclick="runCvmBacktest()">⚡ JALANKAN TRANSPILER & BACKTEST</button>
+          <button class="btn primary" id="btnRun" style="width: 100%; margin-top: 10px;" onclick="runCvmBacktest()">⚡ JALANKAN BACKTEST</button>
           <button class="btn" style="width: 100%; margin-top: 8px;" onclick="runLiveSimulation()">🎬 JALANKAN LIVE SIMULATOR (MT5 STYLE)</button>
 
           <div class="progress-bar" id="progressBar">
@@ -172,7 +177,7 @@ void OnTick() {
           </div>
 
           <div class="card" id="aiExplainerCard" style="display: none;">
-            <h3>🤖 AI Logika EA Explainer</h3>
+            <h3>🤖 AI Logika EA & Bug Inspector</h3>
             <div class="ai-box" id="aiExplainerContent">Membedah logika EA...</div>
           </div>
 
@@ -198,10 +203,11 @@ void OnTick() {
       </div>
     </div>
 
+    <!-- VIEW LIVE SIMULATOR -->
     <div id="view-livesim" class="view">
       <div class="card">
-        <h3>🎬 Live Simulator — Playback Candle-by-Candle (Sinkron AI Explainer)</h3>
-        <div id="simMetaBox" class="ai-box">Belum ada simulasi. Isi form di "⚡ Backtest Terminal" lalu klik tombol "🎬 Jalankan Live Simulator (MT5 Style)".</div>
+        <h3>🎬 Live Simulator — Playback Candle-by-Candle</h3>
+        <div id="simMetaBox" class="ai-box">Belum ada simulasi. Isi form di "⚡ Backtest Terminal" lalu klik "🎬 Jalankan Live Simulator".</div>
 
         <div class="sim-toolbar">
           <button class="btn" id="simPlayBtn" onclick="simTogglePlay()" disabled>▶️ Play</button>
@@ -223,11 +229,12 @@ void OnTick() {
 
         <canvas id="simCandleCanvas" width="1200" height="360" style="width:100%; background:#070c14; border:1px solid var(--border); border-radius:6px;"></canvas>
 
-        <h3 style="margin-top:18px;">📈 Equity Curve — Sumbu X: Waktu · Sumbu Y: Profit (Sinkron dengan Chart di Atas)</h3>
+        <h3 style="margin-top:18px;">📈 Equity Curve Playback</h3>
         <canvas id="simEquityCanvas" height="120"></canvas>
       </div>
     </div>
 
+    <!-- VIEW FULL REPORT -->
     <div id="view-fullreport" class="view">
       <div class="card">
         <h3>📑 Full Report — MT5 Style Analysis Matrix</h3>
@@ -237,7 +244,6 @@ void OnTick() {
             <select id="reportJobSelect"><option value="">-- Memuat histori --</option></select>
           </div>
           <button class="btn primary" onclick="loadFullReport()">📄 Tampilkan Report</button>
-          <button class="btn" onclick="loadFullReport(currentJobId)">⚡ Report Backtest Terakhir</button>
           <button class="btn blue" onclick="openMT5Report()">🖨️ Buka HTML Report MT5</button>
         </div>
         <div id="fullReportBox">
@@ -246,6 +252,7 @@ void OnTick() {
       </div>
     </div>
 
+    <!-- VIEW LEADERBOARD -->
     <div id="view-leaderboard" class="view">
       <div class="card">
         <h3>🏆 Scientific EA Leaderboard (SQLite History)</h3>
@@ -256,7 +263,6 @@ void OnTick() {
                 <th>Job ID</th>
                 <th>EA Name</th>
                 <th>Symbol</th>
-                <th>Year</th>
                 <th>Net Profit</th>
                 <th>Profit Factor</th>
                 <th>Sortino</th>
@@ -265,7 +271,7 @@ void OnTick() {
               </tr>
             </thead>
             <tbody id="leaderboardTable">
-              <tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Memuat Data Histori SQLite...</td></tr>
+              <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Memuat Data Histori SQLite...</td></tr>
             </tbody>
           </table>
         </div>
@@ -280,6 +286,32 @@ void OnTick() {
   let equityChart = null;
   let currentJobId = null;
 
+  document.addEventListener("DOMContentLoaded", function() {
+    loadDataFiles();
+
+    // Auto-detect nama EA saat kode MQL5 diketik/ditempel
+    document.getElementById('mql5CodeInput').addEventListener('input', function() {
+      extractAndSetEAName(this.value);
+    });
+
+    // Auto-update timeframe & tanggal saat file CSV dipilih
+    document.getElementById('dataSelect').addEventListener('change', function() {
+      const selectedFile = this.value;
+      fetch('/api/data-files')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.details) {
+            const fileInfo = data.details.find(item => item.filename === selectedFile);
+            if (fileInfo) {
+              if (fileInfo.start_date) document.getElementById('startDate').value = fileInfo.start_date;
+              if (fileInfo.end_date) document.getElementById('endDate').value = fileInfo.end_date;
+              if (fileInfo.timeframe) document.getElementById('timeframeSelect').value = fileInfo.timeframe;
+            }
+          }
+        });
+    });
+  });
+
   function switchView(viewName) {
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
@@ -287,17 +319,46 @@ void OnTick() {
     document.getElementById('view-' + viewName).classList.add('active');
     document.getElementById('btn-nav-' + viewName).classList.add('active');
     
-    if (viewName === 'leaderboard') {
-      fetchHistoryData();
+    if (viewName === 'leaderboard') fetchHistoryData();
+    if (viewName === 'fullreport') populateReportJobSelect();
+  }
+
+  function extractAndSetEAName(code) {
+    if (!code) return;
+    const match = code.match(/#property\s+copyright\s+"([^"]+)"|#property\s+link\s+"([^"]+)"|class\s+(\w+)|string\s+EA_Name\s*=\s*"([^"]+)"/i);
+    if (match) {
+      const detectedName = match[1] || match[2] || match[3] || match[4];
+      if (detectedName) document.getElementById('eaName').value = detectedName.trim();
     }
-    if (viewName === 'fullreport') {
-      populateReportJobSelect();
-    }
+  }
+
+  async function loadDataFiles() {
+    try {
+      const res = await fetch('/api/data-files');
+      const data = await res.json();
+      const select = document.getElementById('dataSelect');
+      select.innerHTML = '';
+
+      if (data.success && data.details && data.details.length > 0) {
+        data.details.forEach(item => {
+          const opt = document.createElement('option');
+          opt.value = item.filename;
+          opt.textContent = item.filename;
+          select.appendChild(opt);
+        });
+
+        const first = data.details[0];
+        if (first.start_date) document.getElementById('startDate').value = first.start_date;
+        if (first.end_date) document.getElementById('endDate').value = first.end_date;
+        if (first.timeframe) document.getElementById('timeframeSelect').value = first.timeframe;
+      } else {
+        select.innerHTML = '<option value="">❌ File CSV tidak ditemukan</option>';
+      }
+    } catch (e) { console.error("Error loading CSV files:", e); }
   }
 
   async function handleEaUpload(input) {
     if (!input.files || input.files.length === 0) return;
-    
     const file = input.files[0];
     const formData = new FormData();
     formData.append('file', file);
@@ -309,16 +370,14 @@ void OnTick() {
     statusEl.innerText = '⏳ Mengunggah file EA...';
 
     try {
-      const res = await fetch(`${API_BASE}/api/upload-ea`, {
-        method: 'POST',
-        body: formData
-      });
+      const res = await fetch(`${API_BASE}/api/upload-ea`, { method: 'POST', body: formData });
       const data = await res.json();
 
       if (data.success) {
         document.getElementById('eaName').value = data.ea_name || file.name.split('.')[0];
         if (data.mql5_code) {
           document.getElementById('mql5CodeInput').value = data.mql5_code;
+          extractAndSetEAName(data.mql5_code);
         }
         statusEl.innerText = `✅ EA & Kode Terdeteksi: ${data.ea_name}`;
         statusEl.style.color = '#10b981';
@@ -336,6 +395,7 @@ void OnTick() {
     const code = document.getElementById('mql5CodeInput').value;
     const card = document.getElementById('aiExplainerCard');
     const box = document.getElementById('aiExplainerContent');
+    const eaName = document.getElementById('eaName').value;
 
     if (!code.trim()) {
       alert("Harap tempelkan kode MQL5 (.mq5) terlebih dahulu.");
@@ -343,39 +403,36 @@ void OnTick() {
     }
 
     card.style.display = 'block';
-    box.innerText = "⏳ AI sedang membaca & menganalisis struktur AST MQL5...";
+    box.innerText = "⏳ AI sedang membaca & membedah struktur MQL5 serta mencari bug...";
 
     try {
       const res = await fetch(`${API_BASE}/api/explain-ea`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mql5_code: code })
+        body: JSON.stringify({ code: code, file_name: eaName || "Expert Advisor" })
       });
       const data = await res.json();
-      if (data.success) {
+      
+      if (data.explanation) {
         box.innerText = data.explanation;
+        extractAndSetEAName(code);
       } else {
-        box.innerText = "❌ Gagal menganalisis kode.";
+        box.innerText = data.error || "❌ Gagal menganalisis kode.";
       }
     } catch (e) {
-      box.innerText = "⚠️ Terjadi kesalahan koneksi API Explainer.";
+      box.innerText = "⚠️ Terjadi kesalahan koneksi ke AI Explainer.";
     }
   }
 
   function buildBacktestPayload() {
-    const startDateVal = document.getElementById('startDate').value;
-    const endDateVal = document.getElementById('endDate').value;
-    const yearVal = startDateVal ? startDateVal.split('-')[0] : "2024";
-
     return {
-      ea_name: document.getElementById('eaName').value,
-      symbol: document.getElementById('symbolInput').value,
-      year: yearVal,
-      start_date: startDateVal,
-      end_date: endDateVal,
-      balance: parseFloat(document.getElementById('balance').value),
-      lot: parseFloat(document.getElementById('lot').value),
-      mql5_code: document.getElementById('mql5CodeInput').value
+      code: document.getElementById('mql5CodeInput').value,
+      ea_name: document.getElementById('eaName').value || "Default_EA",
+      data_file: document.getElementById('dataSelect').value,
+      start_date: document.getElementById('startDate').value,
+      end_date: document.getElementById('endDate').value,
+      timeframe: document.getElementById('timeframeSelect').value,
+      initial_balance: parseFloat(document.getElementById('balance').value || 10000)
     };
   }
 
@@ -386,12 +443,16 @@ void OnTick() {
     const statusText = document.getElementById('statusText');
 
     const payload = buildBacktestPayload();
+    if (!payload.data_file) {
+      alert("Harap pilih file data CSV terlebih dahulu!");
+      return;
+    }
 
     try {
       btnRun.disabled = true;
       pBar.style.display = 'block';
-      pFill.style.width = '5%';
-      statusText.innerText = 'Membedah AST MQL5 & Mengirim Job...';
+      pFill.style.width = '10%';
+      statusText.innerText = 'Memulai proses Backtest CSV Engine...';
 
       const res = await fetch(`${API_BASE}/api/run-backtest`, {
         method: 'POST',
@@ -401,72 +462,25 @@ void OnTick() {
       const data = await res.json();
 
       if (!data.success) {
-        alert('Error: ' + data.message);
+        alert('Error: ' + (data.error || data.message));
         resetProgress();
         return;
       }
 
-      currentJobId = data.job_id;
-      pollJobStatus(data.job_id);
+      pFill.style.width = '100%';
+      statusText.innerText = 'Backtest selesai!';
+      
+      const report = data.report || data.data || {};
+      document.getElementById('kpiProfit').innerText = '$' + (report.net_profit || 0);
+      document.getElementById('kpiPF').innerText = report.profit_factor || '0.0';
+      document.getElementById('kpiSortino').innerText = report.sortino_ratio || '0.0';
+      document.getElementById('kpiDD').innerText = (report.max_drawdown_pct || 0) + '%';
+
+      renderChart(report.equity_curve || []);
+      renderLogs(report.trades || []);
 
     } catch (err) {
       alert('Gagal terhubung ke Server Backtest!');
-      resetProgress();
-    }
-  }
-
-  function pollJobStatus(jobId) {
-    const pFill = document.getElementById('progressFill');
-    const statusText = document.getElementById('statusText');
-
-    const timer = setInterval(async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/backtest-status/${jobId}`);
-        const data = await res.json();
-
-        if (data.success) {
-          pFill.style.width = data.progress + '%';
-          statusText.innerText = `Memproses Simulasi Vectorized: ${data.progress}%`;
-
-          if (data.status === 'completed') {
-            clearInterval(timer);
-            statusText.innerText = 'Selesai! Mengambil hasil...';
-            fetchResult(jobId);
-          } else if (data.status === 'failed') {
-            clearInterval(timer);
-            alert('Proses Backtest Gagal: ' + (data.error || 'Terjadi kesalahan sistem'));
-            resetProgress();
-          }
-        }
-      } catch (e) {
-        clearInterval(timer);
-        resetProgress();
-      }
-    }, 1000);
-  }
-
-  async function fetchResult(jobId) {
-    try {
-      const res = await fetch(`${API_BASE}/api/backtest-result/${jobId}`);
-      const resData = await res.json();
-      
-      if (!resData.success || !resData.data) {
-        alert('Gagal mengambil data hasil backtest.');
-        resetProgress();
-        return;
-      }
-
-      const data = resData.data;
-
-      document.getElementById('kpiProfit').innerText = '$' + (data.net_profit || 0);
-      document.getElementById('kpiPF').innerText = data.profit_factor || '0.0';
-      document.getElementById('kpiSortino').innerText = data.sortino_ratio || '0.0';
-      document.getElementById('kpiDD').innerText = (data.max_drawdown_pct || 0) + '%';
-
-      document.getElementById('btnOpenReport').disabled = false;
-
-      renderChart(data.equity_curve || []);
-      renderLogs(data.trades || []);
     } finally {
       resetProgress();
     }
@@ -493,10 +507,10 @@ void OnTick() {
     equityChart = new Chart(ctx, {
       type: 'line',
       data: {
-        labels: curve.map(c => c.time),
+        labels: curve.map(c => c.time || c.t || ''),
         datasets: [{
           label: 'Equity ($)',
-          data: curve.map(c => c.equity),
+          data: curve.map(c => c.equity || c.val || 0),
           borderColor: '#d9a75c',
           borderWidth: 2,
           fill: false,
@@ -524,12 +538,12 @@ void OnTick() {
     trades.slice(-20).reverse().forEach(t => {
       tbody.innerHTML += `
         <tr>
-          <td class="mono">${t.close_time || t.open_time}</td>
-          <td class="mono">${t.order_id}</td>
-          <td><b>${t.arah}</b></td>
-          <td class="mono">${t.harga_entry}</td>
+          <td class="mono">${t.close_time || t.open_time || '-'}</td>
+          <td class="mono">${t.order_id || '-'}</td>
+          <td><b>${t.arah || t.type || '-'}</b></td>
+          <td class="mono">${t.harga_entry || t.open_price || '-'}</td>
           <td class="mono">${t.comment || '-'}</td>
-          <td class="mono" style="color: ${t.profit >= 0 ? '#10b981' : '#f43f5e'}">$${t.profit}</td>
+          <td class="mono" style="color: ${(t.profit || 0) >= 0 ? '#10b981' : '#f43f5e'}">$${t.profit || 0}</td>
         </tr>
       `;
     });
@@ -537,21 +551,20 @@ void OnTick() {
 
   async function fetchHistoryData() {
     const tbody = document.getElementById('leaderboardTable');
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Memuat Data Histori SQLite...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Memuat Data Histori SQLite...</td></tr>';
 
     try {
       const res = await fetch(`${API_BASE}/api/history`);
       const data = await res.json();
       
-      if (data.success && data.history.length > 0) {
+      if (data.success && data.history && data.history.length > 0) {
         tbody.innerHTML = '';
         data.history.forEach(r => {
           tbody.innerHTML += `
             <tr>
-              <td class="mono">${r.job_id.substring(0,8)}</td>
+              <td class="mono">${(r.job_id || '').substring(0,8)}</td>
               <td><b>${r.ea_name}</b></td>
-              <td>${r.symbol}</td>
-              <td class="mono">${r.year}</td>
+              <td>${r.symbol || 'XAUUSD'}</td>
               <td class="mono" style="color: ${r.net_profit >= 0 ? '#10b981':'#f43f5e'}">$${r.net_profit}</td>
               <td class="mono">${r.profit_factor}</td>
               <td class="mono">${r.sortino_ratio || 0}</td>
@@ -561,44 +574,15 @@ void OnTick() {
           `;
         });
       } else {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Belum ada histori tersimpan di database Backtest.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Belum ada histori tersimpan di database.</td></tr>';
       }
     } catch(e) {
-      tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Gagal terhubung ke API Histori SQLite.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Gagal terhubung ke API Histori SQLite.</td></tr>';
     }
   }
 
-// Listener saat file data CSV dipilih
-document.getElementById('dataSelect').addEventListener('change', function() {
-    const selectedFile = this.value;
-    
-    fetch('/api/data-files')
-        .then(res => res.json())
-        .then(data => {
-            if (data.success && data.details) {
-                const fileInfo = data.details.find(item => item.filename === selectedFile);
-                if (fileInfo) {
-                    // Set Timeframe otomatis sesuai nama file (misal: H1)
-                    if (document.getElementById('timeframeSelect')) {
-                        document.getElementById('timeframeSelect').value = fileInfo.timeframe;
-                    }
-                    // Set rentang tanggal otomatis (2026-01-02 s/d 2026-08-28)
-                    if (document.getElementById('startDate')) {
-                        document.getElementById('startDate').value = fileInfo.start_date;
-                    }
-                    if (document.getElementById('endDate')) {
-                        document.getElementById('endDate').value = fileInfo.end_date;
-                    }
-                }
-            }
-        });
-});
-
   // ============================================================
-  // LIVE SIMULATOR (MT5 Strategy Tester "Visual Mode" style)
-  // Adaptasi dari script mplfinance/animation user: strategi &
-  // indikator TIDAK di-hardcode ke EMA — mengikuti hasil AI
-  // Explainer (backend: ea_live_simulator.py + backtest_engine.py)
+  // LIVE SIMULATOR
   // ============================================================
 
   let simData = null;
@@ -610,7 +594,7 @@ document.getElementById('dataSelect').addEventListener('change', function() {
 
   async function runLiveSimulation() {
     const payload = buildBacktestPayload();
-    if (!payload.mql5_code || !payload.mql5_code.trim()) {
+    if (!payload.code || !payload.code.trim()) {
       alert("Harap tempelkan kode MQL5 (.mq5) terlebih dahulu.");
       return;
     }
@@ -628,7 +612,7 @@ document.getElementById('dataSelect').addEventListener('change', function() {
       });
       const data = await res.json();
       if (!data.success) {
-        box.innerText = '❌ ' + data.message;
+        box.innerText = '❌ ' + (data.message || data.error);
         return;
       }
       pollSimStatus(data.job_id);
@@ -645,7 +629,7 @@ document.getElementById('dataSelect').addEventListener('change', function() {
         const data = await res.json();
         if (!data.success) { clearInterval(timer); return; }
 
-        box.innerText = `⏳ Memproses simulasi: ${data.progress}% (menghitung indikator & signal sesuai strategi terdeteksi AI Explainer)`;
+        box.innerText = `⏳ Memproses simulasi: ${data.progress}%`;
 
         if (data.status === 'completed') {
           clearInterval(timer);
@@ -671,9 +655,7 @@ document.getElementById('dataSelect').addEventListener('change', function() {
 
     const m = simData.meta;
     document.getElementById('simMetaBox').innerText =
-      `EA: ${m.ea_name}  |  Symbol: ${m.symbol}  |  Strategi Terdeteksi AI: ${m.strategy_type}\n` +
-      `Indikator: ${(m.indicators || []).join(', ') || '-'}\n` +
-      `Overlay Chart: ${(m.overlay_labels || []).join(', ') || '-'}\n` +
+      `EA: ${m.ea_name}  |  Symbol: ${m.symbol}  |  Strategi: ${m.strategy_type}\n` +
       `Total Candle: ${m.total_frames}  |  Total Trade: ${m.total_trades}  |  Max DD: ${m.max_drawdown_pct}%`;
 
     document.getElementById('simPlayBtn').disabled = false;
@@ -752,23 +734,13 @@ document.getElementById('dataSelect').addEventListener('change', function() {
       type: 'line',
       data: {
         labels: [],
-        datasets: [{
-          label: 'Equity ($)',
-          data: [],
-          borderColor: '#d9a75c',
-          borderWidth: 2,
-          fill: false,
-          pointRadius: 0
-        }]
+        datasets: [{ label: 'Equity ($)', data: [], borderColor: '#d9a75c', borderWidth: 2, fill: false, pointRadius: 0 }]
       },
       options: {
         responsive: true,
         animation: false,
         plugins: { legend: { display: false } },
-        scales: {
-          x: { display: false },
-          y: { grid: { color: '#1a2436' } }
-        }
+        scales: { x: { display: false }, y: { grid: { color: '#1a2436' } } }
       }
     });
   }
@@ -790,12 +762,10 @@ document.getElementById('dataSelect').addEventListener('change', function() {
     else if (f.position === 'SELL') { badge.className = 'badge red'; badge.innerText = 'SHORT'; }
     else { badge.className = 'badge yellow'; badge.innerText = 'FLAT'; }
 
-    // Candlestick + overlay indikator (window bergerak, sinkron waktu)
     const WINDOW = 100;
     const start = Math.max(0, idx - WINDOW);
     drawCandles(frames.slice(start, idx + 1));
 
-    // Equity curve — sumbu X waktu, sumbu Y profit, sinkron dg chart di atas
     const eqSlice = frames.slice(0, idx + 1);
     simEquityChart.data.labels = eqSlice.map(x => x.t);
     simEquityChart.data.datasets[0].data = eqSlice.map(x => x.equity);
@@ -811,13 +781,6 @@ document.getElementById('dataSelect').addEventListener('change', function() {
 
     let lo = Math.min(...slice.map(c => c.l));
     let hi = Math.max(...slice.map(c => c.h));
-
-    const overlayVals = slice.flatMap(c => Object.values(c.overlays || {}).filter(v => v !== null && v !== undefined));
-    if (overlayVals.length) {
-      lo = Math.min(lo, ...overlayVals);
-      hi = Math.max(hi, ...overlayVals);
-    }
-
     const pad = (hi - lo) * 0.08 || 1;
     lo -= pad; hi += pad;
 
@@ -837,38 +800,8 @@ document.getElementById('dataSelect').addEventListener('change', function() {
       const bodyTop = yOf(Math.max(c.o, c.c));
       const bodyH = Math.max(1, Math.abs(yOf(c.o) - yOf(c.c)));
       ctx.fillRect(x - cw * 0.35, bodyTop, cw * 0.7, bodyH);
-
-      if (c.opened) {
-        ctx.fillStyle = c.opened.direction === 'BUY' ? '#10b981' : '#f43f5e';
-        ctx.beginPath();
-        ctx.arc(x, yOf(c.opened.price), 4, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    });
-
-    // Overlay garis indikator — dinamis mengikuti strategi terdeteksi AI
-    // (MA crossover, Bollinger Bands, Alligator, dst — bukan hardcode EMA)
-    const colors = ['#3b82f6', '#f59e0b', '#a855f7'];
-    const labels = (simData.meta.overlay_labels || []);
-    labels.forEach((label, li) => {
-      ctx.strokeStyle = colors[li % colors.length];
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      let started = false;
-      slice.forEach((c, i) => {
-        const v = c.overlays ? c.overlays[label] : null;
-        if (v === null || v === undefined) return;
-        const x = i * cw + cw / 2;
-        const y = yOf(v);
-        if (!started) { ctx.moveTo(x, y); started = true; } else { ctx.lineTo(x, y); }
-      });
-      ctx.stroke();
     });
   }
-
-  // ============================================================
-  // FULL REPORT — MT5 style analysis matrix per EA
-  // ============================================================
 
   async function populateReportJobSelect() {
     const sel = document.getElementById('reportJobSelect');
@@ -876,28 +809,28 @@ document.getElementById('dataSelect').addEventListener('change', function() {
       const res = await fetch(`${API_BASE}/api/history`);
       const data = await res.json();
       sel.innerHTML = '<option value="">-- Pilih Job --</option>';
-      if (data.success) {
+      if (data.success && data.history) {
         data.history.forEach(r => {
           const opt = document.createElement('option');
           opt.value = r.job_id;
-          opt.innerText = `${r.ea_name} | ${r.symbol} | ${r.year} | $${r.net_profit}`;
+          opt.innerText = `${r.ea_name} | $${r.net_profit}`;
           sel.appendChild(opt);
         });
       }
-    } catch (e) { /* diamkan, biarkan user pakai "Report Backtest Terakhir" */ }
+    } catch (e) {}
   }
 
-  async function loadFullReport(jobIdOverride) {
+  async function loadFullReport() {
     const sel = document.getElementById('reportJobSelect');
-    const jobId = jobIdOverride || sel.value;
+    const jobId = sel.value;
     const box = document.getElementById('fullReportBox');
 
     if (!jobId) {
-      box.innerHTML = '<p style="color: var(--red);">Pilih job terlebih dahulu, atau jalankan backtest baru.</p>';
+      box.innerHTML = '<p style="color: var(--red);">Pilih job terlebih dahulu.</p>';
       return;
     }
 
-    box.innerHTML = '<p style="color: var(--text-muted);">⏳ Memuat matriks analisa lengkap...</p>';
+    box.innerHTML = '<p style="color: var(--text-muted);">⏳ Memuat matriks analisa...</p>';
 
     try {
       const res = await fetch(`${API_BASE}/api/backtest-result/${jobId}`);
@@ -905,86 +838,30 @@ document.getElementById('dataSelect').addEventListener('change', function() {
 
       if (data.success && data.data) {
         renderFullReportMetrics(data.data, jobId);
-        return;
-      }
-
-      // Fallback: cari di histori database (job lama, tidak lagi in-memory)
-      const res2 = await fetch(`${API_BASE}/api/history/${jobId}`);
-      const data2 = await res2.json();
-      if (data2.success && data2.data) {
-        renderFullReportMetrics(data2.data, jobId);
       } else {
-        box.innerHTML = '<p style="color: var(--red);">Report tidak ditemukan untuk job ini.</p>';
+        box.innerHTML = '<p style="color: var(--red);">Report tidak ditemukan.</p>';
       }
     } catch (e) {
-      box.innerHTML = '<p style="color: var(--red);">Gagal memuat report dari server.</p>';
+      box.innerHTML = '<p style="color: var(--red);">Gagal memuat report.</p>';
     }
   }
 
   function renderFullReportMetrics(m, jobId) {
     const box = document.getElementById('fullReportBox');
-    const skip = ['trades', 'equity_curve', 'params', 'ai_logic', 'data_files'];
-
     let rows = '';
-    Object.keys(m).sort().forEach(key => {
-      if (skip.includes(key)) return;
-      let val = m[key];
-      if (val === null || val === undefined) val = '-';
-      if (typeof val === 'object') val = JSON.stringify(val);
+    Object.keys(m).forEach(key => {
       rows += `<tr>
         <td style="color:var(--text-muted); font-size:10px; font-weight:700; text-transform:uppercase;">${String(key).replace(/_/g, ' ')}</td>
-        <td class="mono">${val}</td>
+        <td class="mono">${JSON.stringify(m[key])}</td>
       </tr>`;
     });
-
-    let logicHtml = '';
-    if (m.ai_logic) {
-      const logic = m.ai_logic;
-      logicHtml = `<div class="ai-box" style="margin-top:14px;">` +
-        `Strategi Terdeteksi AI : ${logic.strategy_type || '-'}\n` +
-        `Indikator              : ${(logic.indicators || []).join(', ') || '-'}\n` +
-        `Exit Rules (TP/SL/dll) : ${logic.exit_rules ? JSON.stringify(logic.exit_rules) : '-'}\n` +
-        `Lot Management         : ${logic.lot_management ? JSON.stringify(logic.lot_management) : '-'}\n` +
-        `Risk Management        : ${logic.risk_management ? JSON.stringify(logic.risk_management) : '-'}` +
-        `</div>`;
-    }
 
     box.innerHTML = `
       <div style="margin-bottom:10px; font-family: var(--font-mono); font-size:11px; color: var(--text-muted);">Job ID: ${jobId}</div>
       <div class="table-wrap" style="max-height:520px;">
         <table><tbody>${rows}</tbody></table>
       </div>
-      ${logicHtml}
     `;
-// Auto detect Nama EA dari komentar atau input MQL5
-document.getElementById('mql5Code').addEventListener('input', function() {
-    const code = this.value;
-    const match = code.match(/#property\s+link\s+"([^"]+)"|class\s+(\w+)|#property\s+copyright\s+"([^"]+)"/i);
-    if (match) {
-        const detectedName = match[1] || match[2] || match[3];
-        if (detectedName) {
-            document.getElementById('eaName').value = detectedName;
-        }
-    }
-});
-
-// Auto set tanggal & timeframe dari data CSV yang dipilih
-document.getElementById('dataSelect').addEventListener('change', function() {
-    const selectedFile = this.value;
-    fetch('/api/data-files')
-        .then(res => res.json())
-        .then(data => {
-            if (data.success && data.details) {
-                const fileInfo = data.details.find(item => item.filename === selectedFile);
-                if (fileInfo) {
-                    if (document.getElementById('startDate')) document.getElementById('startDate').value = fileInfo.start_date;
-                    if (document.getElementById('endDate')) document.getElementById('endDate').value = fileInfo.end_date;
-                    if (document.getElementById('timeframeSelect')) document.getElementById('timeframeSelect').value = fileInfo.timeframe;
-                }
-            }
-        });
-});
-
   }
 </script>
 </body>
