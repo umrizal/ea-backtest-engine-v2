@@ -393,27 +393,46 @@ def upload_ea():
 # ROUTES - BACKTEST
 # ============================================================
 
-@app.route("/api/run-backtest", methods=["POST"])
+@app.route('/api/run-backtest', methods=['POST'])
 def run_backtest():
+    try:
+        data = request.json or {}
+        
+        # Menerima baik 'code' maupun 'mql5_code' dari payload JS
+        mql5_code = data.get('code') or data.get('mql5_code', '')
 
-    body = request.get_json(
-        force=True,
-        silent=True
-    ) or {}
+        if not mql5_code or not str(mql5_code).strip():
+            return jsonify({
+                "success": False,
+                "error": "Kode MQL5 tidak ditemukan. Harap paste kode atau upload file EA."
+            }), 400
 
-    # ========================================================
-    # VALIDATION
-    # ========================================================
+        data_file = data.get('data_file') or data.get('symbol', '')
+        if not data_file.endswith('.csv'):
+            data_file = "XAUUSD_H1_202601020100_202608280200.csv"
 
-    if not body.get("mql5_code"):
+        data_path = os.path.join(os.path.dirname(__file__), 'data', data_file)
+
+        # Inisialisasi Engine dan Jalankan Backtest
+        engine = BacktestEngine(data_path=data_path)
+        results = engine.run(
+            mql5_code=mql5_code,
+            initial_balance=float(data.get('initial_balance') or data.get('balance') or 10000),
+            start_date=data.get('start_date'),
+            end_date=data.get('end_date')
+        )
 
         return jsonify({
+            "success": True,
+            "report": results,
+            "data": results
+        }), 200
+
+    except Exception as e:
+        return jsonify({
             "success": False,
-            "message": (
-                "Kode MQL5 tidak ditemukan. "
-                "Harap paste kode atau upload file EA."
-            )
-        }), 400
+            "error": str(e)
+        }), 500
 
     # ========================================================
     # DEFAULT PARAMS
