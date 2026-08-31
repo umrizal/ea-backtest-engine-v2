@@ -302,6 +302,7 @@
   async function analyzeCurrentEA() {
     // Ambil kode dari textarea atau state global
     const codeEl =
+      document.getElementById("mql5CodeInput") ||
       document.getElementById("mqlCode") ||
       document.getElementById("eaCode") ||
       document.querySelector("textarea");
@@ -351,12 +352,14 @@
   async function runWithEditedParams() {
     const code =
       window.currentMqlCode ||
+      document.getElementById("mql5CodeInput")?.value ||
       document.getElementById("mqlCode")?.value ||
       document.getElementById("eaCode")?.value ||
+      document.querySelector("textarea")?.value ||
       "";
 
     if (!code.trim()) {
-      alert("Kode EA kosong.");
+      alert("Kode EA kosong. Upload atau paste dulu.");
       return;
     }
 

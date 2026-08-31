@@ -45,7 +45,7 @@
     .file-input-wrapper input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
     .progress-bar { width: 100%; background: #070c14; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 12px; display: none; border: 1px solid var(--border); }
     .progress-fill { height: 100%; background: linear-gradient(90deg, var(--gold), #f59e0b); width: 0%; transition: width 0.2s; }
-    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px; }
     .kpi-card { background: var(--panel); border: 1px solid var(--border); padding: 14px; border-radius: 8px; text-align: center; }
     .kpi-card .label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; }
     .kpi-card .val { font-family: var(--font-mono); font-size: 18px; font-weight: 800; color: var(--gold); margin-top: 4px; }
@@ -102,7 +102,6 @@
       .sidebar { position: static; width: 100%; height: auto; }
       .layout { display: block; }
       .main { margin-left: 0; width: 100%; }
-      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
       .topbar { flex-direction: column; align-items: flex-start; gap: 12px; }
     }
 
