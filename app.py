@@ -37,7 +37,7 @@ except ImportError:
 
 # Live Simulator
 try:
-    from ea_live_simulator import LiveSimulator
+    from ea_live_simulator_stage2 import LiveSimulator
     LIVE_SIMULATOR_AVAILABLE = True
 except Exception as e:
     print(f"[WARNING] LiveSimulator tidak tersedia: {e}")
