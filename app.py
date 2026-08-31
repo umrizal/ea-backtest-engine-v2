@@ -26,6 +26,14 @@ from portfolio_engine import PortfolioEngine
 from optimizer import GeneticOptimizer
 from ai_explainer import AIExplainer
 from report_generator import ReportGenerator
+# Stage 2
+try:
+    from stage2_routes import register_stage2_routes
+    STAGE2_AVAILABLE = True
+except ImportError:
+    STAGE2_AVAILABLE = False
+    register_stage2_routes = None
+
 
 # Live Simulator
 try:
@@ -1581,6 +1589,20 @@ def method_not_allowed(error):
 # ============================================================
 # MAIN ENTRY POINT
 # ============================================================
+
+
+# === STAGE2 ROUTES (auto-injected) ===
+if STAGE2_AVAILABLE and register_stage2_routes is not None:
+    try:
+        register_stage2_routes(
+            app,
+            ai_explainer=ai_explainer if AI_EXPLAINER_AVAILABLE else None,
+            bt_engine=bt_engine,
+        )
+        print("[INIT] Stage 2 routes registered.")
+    except Exception as _s2_err:
+        print(f"[WARNING] Stage 2 routes gagal: {_s2_err}")
+# === END STAGE2 ===
 
 if __name__ == "__main__":
 
