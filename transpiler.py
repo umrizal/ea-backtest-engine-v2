@@ -1,3 +1,14 @@
+
+import pandas as pd
+import numpy as np
+
+def _ensure_series(val):
+    if isinstance(val, np.ndarray):
+        return pd.Series(val)
+    elif not isinstance(val, (pd.Series, pd.DataFrame)):
+        return pd.Series(val)
+    return val
+
 # ============================================================
 # transpiler.py
 # Pintarin Laboratorium EA - Stage 1

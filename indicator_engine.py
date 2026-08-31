@@ -1,10 +1,21 @@
+
+import pandas as pd
+import numpy as np
+
+def _ensure_series(val):
+    if isinstance(val, np.ndarray):
+        return pd.Series(val)
+    elif not isinstance(val, (pd.Series, pd.DataFrame)):
+        return pd.Series(val)
+    return val
+
 import numpy as np
 import pandas as pd
 
 class IndicatorEngine:
     @staticmethod
     def sma(series, period):
-        return series.rolling(window=period, min_periods=1).mean().to_numpy()
+        return _ensure_series(series).rolling(window=period, min_periods=1).mean().to_numpy()
 
     @staticmethod
     def ema(series, period):
@@ -29,8 +40,8 @@ class IndicatorEngine:
 
     @staticmethod
     def bollinger_bands(series, period=20, std_dev=2.0):
-        sma = series.rolling(window=period, min_periods=1).mean()
-        std = series.rolling(window=period, min_periods=1).std().fillna(0)
+        sma = _ensure_series(series).rolling(window=period, min_periods=1).mean()
+        std = _ensure_series(series).rolling(window=period, min_periods=1).std().fillna(0)
         upper = sma + (std * std_dev)
         lower = sma - (std * std_dev)
         return upper.to_numpy(), sma.to_numpy(), lower.to_numpy()
@@ -52,5 +63,5 @@ class IndicatorEngine:
         low_min = df[low_col].astype(float).rolling(k_period).min()
         high_max = df[high_col].astype(float).rolling(k_period).max()
         k = 100 * ((df[close_col].astype(float) - low_min) / (high_max - low_min))
-        d = k.rolling(d_period).mean()
+        d = _ensure_series(k).rolling(d_period).mean()
         return k.fillna(50).to_numpy(), d.fillna(50).to_numpy()
