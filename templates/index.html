@@ -258,7 +258,7 @@
           <button class="btn" id="simPlayBtn" onclick="simTogglePlay()" disabled>▶️ Play</button>
           <button class="btn" onclick="simRestart()" id="simRestartBtn" disabled>⏮️ Restart</button>
           <label style="font-size:10px; color:var(--text-muted); text-transform:uppercase;">Speed</label>
-          <input type="range" id="simSpeed" min="10" max="500" value="120" style="width:120px;" oninput="simSpeedChange(this.value)">
+          <input type="range" id="simSpeed" min="10" max="500" value="390" style="width:120px;" oninput="simSpeedChange(this.value)">
           <span id="simSpeedLabel" style="font-family:var(--font-mono); font-size:11px;">120ms/candle</span>
           <input type="range" id="simSeek" min="0" max="0" value="0" style="flex:1; min-width:150px;" oninput="simSeek(this.value)">
           <span id="simFrameLabel" style="font-family:var(--font-mono); font-size:11px;">0 / 0</span>
@@ -267,7 +267,7 @@
         <div style="display:flex; gap:16px; align-items:center; margin-bottom:10px; flex-wrap:wrap;">
           <span id="simStatusBadge" class="badge yellow">FLAT</span>
           <span style="font-family:var(--font-mono); font-size:12px;">Balance: <b id="simBalance">$0</b></span>
-          <span style="font-family:var(--font-mono); font-size:12px;">Equity: <b id="simEquity">$0</b></span>
+          <span style="font-family:var(--font-mono); font-size:12px;">Profit: <b id="simEquity">$0</b></span>
           <span style="font-family:var(--font-mono); font-size:12px;">Trades: <b id="simTrades">0</b></span>
           <span style="font-family:var(--font-mono); font-size:12px;">Drawdown: <b id="simDD">0%</b></span>
         </div>
@@ -1043,7 +1043,9 @@ function buildBacktestPayload() {
   }
 
   function simSpeedChange(val) {
-    simSpeedMs = parseInt(val);
+    // Slider digeser ke KANAN (nilai makin besar) = makin CEPAT.
+    const raw = parseInt(val);
+    simSpeedMs = 510 - raw; // raw=10 (kiri) -> 500ms (lambat), raw=500 (kanan) -> 10ms (cepat)
     document.getElementById('simSpeedLabel').innerText = simSpeedMs + 'ms/candle';
     if (simPlaying) {
       clearInterval(simTimer);
@@ -1107,7 +1109,9 @@ function buildBacktestPayload() {
     const trades = normalizeTrades(simData.trades || []);
     if (!trades.length) {
       // Fallback: backend tidak mengirim daftar trade granular, pakai nilai bawaan.
-      return { balance: toNumber(f.balance, initialBalance), equity: toNumber(f.equity, initialBalance) };
+      const balanceFallback = toNumber(f.balance, initialBalance);
+      const equityFallback = toNumber(f.equity, initialBalance);
+      return { balance: balanceFallback, equity: equityFallback, profit: equityFallback - initialBalance };
     }
 
     const curTime = new Date(f.t).getTime();
@@ -1130,8 +1134,9 @@ function buildBacktestPayload() {
       ? toNumber(openTrade.floating_profit ?? openTrade.unrealized_profit ?? openTrade._profit, 0)
       : 0;
     const equity = balance + floating;
+    const profit = equity - initialBalance; // total P&L simulasi berjalan (realized + floating)
 
-    return { balance, equity };
+    return { balance, equity, profit };
   }
 
   function renderSimFrame(idx) {
@@ -1139,12 +1144,14 @@ function buildBacktestPayload() {
     const frames = simData.frames;
     const f = frames[idx];
 
-    const { balance, equity } = computeSimBalanceEquity(idx);
+    const { balance, profit } = computeSimBalanceEquity(idx);
 
     document.getElementById('simFrameLabel').innerText = `${idx + 1} / ${frames.length}`;
     document.getElementById('simSeek').value = idx;
     document.getElementById('simBalance').innerText = money(balance);
-    document.getElementById('simEquity').innerText = money(equity);
+    const profitEl = document.getElementById('simEquity');
+    profitEl.innerText = (profit >= 0 ? '+' : '') + money(profit);
+    profitEl.style.color = profit >= 0 ? '#10b981' : '#f43f5e';
     document.getElementById('simTrades').innerText = f.trades_total;
     document.getElementById('simDD').innerText = f.drawdown + '%';
 
@@ -1155,7 +1162,8 @@ function buildBacktestPayload() {
 
     const WINDOW = 100;
     const start = Math.max(0, idx - WINDOW);
-    drawCandles(frames.slice(start, idx + 1));
+    const tradesForMarkers = normalizeTrades(simData.trades || []);
+    drawCandles(frames.slice(start, idx + 1), tradesForMarkers);
 
     const eqSlice = frames.slice(0, idx + 1);
     simEquityChart.data.labels = eqSlice.map(x => x.t);
@@ -1172,7 +1180,7 @@ function buildBacktestPayload() {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
-  function drawCandles(slice) {
+  function drawCandles(slice, trades = []) {
     const canvas = document.getElementById('simCandleCanvas');
     const ctx = canvas.getContext('2d');
     const w = canvas.width, h = canvas.height;
@@ -1226,6 +1234,35 @@ function buildBacktestPayload() {
       const bodyH = Math.max(1, Math.abs(yOf(c.o) - yOf(c.c)));
       ctx.fillRect(x - cw * 0.35, bodyTop, cw * 0.7, bodyH);
     });
+
+    // --- Marker sinyal BUY/SELL di titik candle open trade ---
+    if (trades && trades.length) {
+      const SIZE = 6;
+      trades.forEach(t => {
+        const openTime = new Date(t._openTime).getTime();
+        if (isNaN(openTime)) return;
+        const mIdx = slice.findIndex(c => new Date(c.t).getTime() === openTime);
+        if (mIdx === -1) return;
+        const c = slice[mIdx];
+        const x = MARGIN_LEFT + mIdx * cw + cw / 2;
+        const isBuy = (t._direction || '').toUpperCase().includes('BUY');
+        ctx.fillStyle = isBuy ? '#10b981' : '#f43f5e';
+        ctx.beginPath();
+        if (isBuy) {
+          const y = yOf(c.l) + SIZE + 4;
+          ctx.moveTo(x, y - SIZE);
+          ctx.lineTo(x - SIZE, y + SIZE);
+          ctx.lineTo(x + SIZE, y + SIZE);
+        } else {
+          const y = yOf(c.h) - SIZE - 4;
+          ctx.moveTo(x, y + SIZE);
+          ctx.lineTo(x - SIZE, y - SIZE);
+          ctx.lineTo(x + SIZE, y - SIZE);
+        }
+        ctx.closePath();
+        ctx.fill();
+      });
+    }
 
     // --- Label sumbu X (tanggal & waktu sesuai data CSV) ---
     ctx.fillStyle = '#64748b';
