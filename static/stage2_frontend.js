@@ -438,7 +438,13 @@
     const btn = document.createElement("button");
     btn.id = "btn-stage2-parse";
     btn.className = "btn primary";
-    btn.style.marginTop = "8px";
+    btn.style.flex = "1";
+    btn.style.margin = "0 0 10px 0";
+    btn.style.display = "flex";
+    btn.style.alignItems = "center";
+    btn.style.justifyContent = "center";
+    btn.style.textAlign = "center";
+    btn.style.lineHeight = "1.2";
     btn.textContent = "🤖 AI Parse & Kalibrasi";
     btn.onclick = analyzeCurrentEA;
 
