@@ -1,98 +1,110 @@
-# ============================================================
-# patch_stage3_app.py
-# Inject Stage 3 routes ke app.py
-# ============================================================
+// ============================================================
+// stage3_frontend.js
+// Frontend module for Stage 3 - Backtest Engine
+// ============================================================
 
-import os
-import sys
+class Stage3Frontend {
+  constructor() {
+    this.apiBase = '/api/stage3';
+    this.results = null;
+    this.initEventListeners();
+  }
 
-APP_FILE = "app.py"
-MARKER = "# === STAGE3 ROUTES (auto-injected) ==="
+  initEventListeners() {
+    document.addEventListener('DOMContentLoaded', () => {
+      this.setupUI();
+    });
+  }
 
+  setupUI() {
+    const stage3Container = document.getElementById('stage3-container');
+    if (stage3Container) {
+      stage3Container.innerHTML = this.getTemplate();
+      this.attachHandlers();
+    }
+  }
 
-def patch():
-    if not os.path.exists(APP_FILE):
-        print(f"[ERROR] {APP_FILE} tidak ditemukan.")
-        sys.exit(1)
+  getTemplate() {
+    return `
+      <div class="stage3-panel">
+        <h2>Stage 3 - Advanced Analysis</h2>
+        <div class="stage3-controls">
+          <button id="btn-walkforward" class="btn btn-primary">Walk Forward Analysis</button>
+          <button id="btn-portfolio-compare" class="btn btn-primary">Portfolio Compare</button>
+          <button id="btn-report-export" class="btn btn-primary">Export Report</button>
+        </div>
+        <div id="stage3-results" class="results-container"></div>
+      </div>
+    `;
+  }
 
-    with open(APP_FILE, "r", encoding="utf-8") as f:
-        content = f.read()
+  attachHandlers() {
+    document.getElementById('btn-walkforward')?.addEventListener('click', () => this.runWalkForward());
+    document.getElementById('btn-portfolio-compare')?.addEventListener('click', () => this.runPortfolioCompare());
+    document.getElementById('btn-report-export')?.addEventListener('click', () => this.exportReport());
+  }
 
-    if MARKER in content:
-        print("[OK] Stage 3 sudah terpasang.")
-        return
+  async runWalkForward() {
+    try {
+      const response = await fetch(`${this.apiBase}/walkforward`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const data = await response.json();
+      this.displayResults('Walk Forward Results', data);
+    } catch (error) {
+      console.error('Walk forward error:', error);
+      this.showError('Failed to run walk forward analysis');
+    }
+  }
 
-    import_block = (
-        "\n# Stage 3\n"
-        "try:\n"
-        "    from stage3_routes import register_stage3_routes\n"
-        "    STAGE3_AVAILABLE = True\n"
-        "except ImportError:\n"
-        "    STAGE3_AVAILABLE = False\n"
-        "    register_stage3_routes = None\n"
-    )
+  async runPortfolioCompare() {
+    try {
+      const response = await fetch(`${this.apiBase}/portfolio-compare`, {
+        method: 'GET'
+      });
+      const data = await response.json();
+      this.displayResults('Portfolio Comparison', data);
+    } catch (error) {
+      console.error('Portfolio compare error:', error);
+      this.showError('Failed to run portfolio comparison');
+    }
+  }
 
-    if "STAGE2_AVAILABLE" in content:
-        content = content.replace(
-            "STAGE2_AVAILABLE = False\n    register_stage2_routes = None",
-            "STAGE2_AVAILABLE = False\n    register_stage2_routes = None" + import_block,
-            1,
-        )
-    elif "from report_generator import ReportGenerator" in content:
-        content = content.replace(
-            "from report_generator import ReportGenerator",
-            "from report_generator import ReportGenerator" + import_block,
-            1,
-        )
-    else:
-        content = content.replace("CORS(app)", "CORS(app)" + import_block, 1)
+  async exportReport() {
+    try {
+      const response = await fetch(`${this.apiBase}/export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'stage3_report.xlsx';
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Export error:', error);
+      this.showError('Failed to export report');
+    }
+  }
 
-    register_block = f"""
-{MARKER}
-if STAGE3_AVAILABLE and register_stage3_routes is not None:
-    try:
-        _ss = None
-        try:
-            from sheet_sync import SheetSyncManager
-            _ss = SheetSyncManager()
-        except Exception:
-            pass
-        register_stage3_routes(
-            app,
-            bt_engine=bt_engine,
-            sheet_sync=_ss,
-        )
-        print("[INIT] Stage 3 routes registered.")
-    except Exception as _s3_err:
-        print(f"[WARNING] Stage 3 routes gagal: {{_s3_err}}")
-# === END STAGE3 ===
+  displayResults(title, data) {
+    const container = document.getElementById('stage3-results');
+    if (container) {
+      container.innerHTML = `<h3>${title}</h3><pre>${JSON.stringify(data, null, 2)}</pre>`;
+    }
+  }
 
-"""
+  showError(message) {
+    const container = document.getElementById('stage3-results');
+    if (container) {
+      container.innerHTML = `<div class="error">${message}</div>`;
+    }
+  }
+}
 
-    if "# === END STAGE2 ===" in content:
-        content = content.replace(
-            "# === END STAGE2 ===",
-            "# === END STAGE2 ===\n" + register_block,
-            1,
-        )
-    elif 'if __name__ == "__main__":' in content:
-        content = content.replace(
-            'if __name__ == "__main__":',
-            register_block + 'if __name__ == "__main__":',
-            1,
-        )
-    else:
-        content += "\n" + register_block
-
-    with open(APP_FILE, "w", encoding="utf-8") as f:
-        f.write(content)
-
-    print("[OK] app.py di-patch untuk Stage 3.")
-    print("     File yang dibutuhkan di root:")
-    print("       stage3_routes.py, walkforward.py, condition_builder.py,")
-    print("       portfolio_compare.py, report_export.py")
-    print("       stage3_frontend.js → static/")
-
-
-if __name__ == "__main__":
-    patch()
+// Initialize Stage 3 Frontend
+const stage3Frontend = new Stage3Frontend();
