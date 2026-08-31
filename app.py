@@ -33,6 +33,14 @@ try:
 except ImportError:
     STAGE2_AVAILABLE = False
     register_stage2_routes = None
+# Stage 3
+try:
+    from stage3_routes import register_stage3_routes
+    STAGE3_AVAILABLE = True
+except ImportError:
+    STAGE3_AVAILABLE = False
+    register_stage3_routes = None
+
 
 
 # Live Simulator
@@ -1603,6 +1611,27 @@ if STAGE2_AVAILABLE and register_stage2_routes is not None:
     except Exception as _s2_err:
         print(f"[WARNING] Stage 2 routes gagal: {_s2_err}")
 # === END STAGE2 ===
+
+# === STAGE3 ROUTES (auto-injected) ===
+if STAGE3_AVAILABLE and register_stage3_routes is not None:
+    try:
+        _ss = None
+        try:
+            from sheet_sync import SheetSyncManager
+            _ss = SheetSyncManager()
+        except Exception:
+            pass
+        register_stage3_routes(
+            app,
+            bt_engine=bt_engine,
+            sheet_sync=_ss,
+        )
+        print("[INIT] Stage 3 routes registered.")
+    except Exception as _s3_err:
+        print(f"[WARNING] Stage 3 routes gagal: {_s3_err}")
+# === END STAGE3 ===
+
+
 
 if __name__ == "__main__":
 
