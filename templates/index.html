@@ -467,7 +467,7 @@
                 <p style="color: var(--text-muted); font-size: 10.5px; margin: 6px 0 10px 0;">
                   Lihat &amp; ubah semua parameter yang berhasil di-parsing dari EA (TP, SL, lot, dsb) sebelum menjalankan backtest.
                 </p>
-                <button class="btn blue" style="width:100%;" onclick="Stage2.revealParamPanel()">⚙️ Tampilkan &amp; Setel Parameter</button>
+                <button class="btn blue" style="width:100%;" id="btnOptionBParam" onclick="Stage2.revealParamPanel()">⚙️ Tampilkan &amp; Setel Parameter</button>
               </div>
             </div>
           </div>
@@ -834,6 +834,7 @@
     const box = document.getElementById('aiExplainerContent');
     const eaName = document.getElementById('eaName').value;
     const choiceCard = document.getElementById('backtestChoiceCard');
+    const btnOptionB = document.getElementById('btnOptionBParam');
 
     if (!code.trim()) {
       alert("Harap tempelkan kode MQL5 (.mq5) terlebih dahulu.");
@@ -844,29 +845,59 @@
     if (choiceCard) choiceCard.style.display = 'none';
     box.innerText = "AI sedang membaca & membedah struktur MQL5 serta mencari bug...";
 
+    // 1) Penjelasan teks — endpoint asli /api/explain-ea yang sudah terbukti
+    //    stabil. Ini WAJIB berhasil supaya "Bedah EA" tetap bekerja seperti
+    //    sebelumnya, apa pun status endpoint parsing di bawah.
+    let explanationOk = false;
     try {
-      // Satu panggilan: teks penjelasan + parsing parameter sekaligus,
-      // supaya setelah "Bedah EA" langsung tersedia 2 pilihan backtest.
-      const data = await Stage2.explainAndParse(code, eaName || "Expert Advisor");
+      const res = await fetch(`${API_BASE}/api/explain-ea`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: code, file_name: eaName || "Expert Advisor" })
+      });
+      const data = await res.json();
 
       if (data.explanation) {
         box.innerText = data.explanation;
         extractAndSetEAName(code);
+        explanationOk = true;
       } else {
         box.innerText = data.error || "Gagal menganalisis kode.";
       }
+    } catch (e) {
+      console.error("explain-ea gagal:", e);
+      box.innerText = "Terjadi kesalahan koneksi ke AI Explainer.";
+      return;
+    }
 
-      if (data.success) {
-        // Siapkan (isi) panel parameter Opsi B tanpa langsung menampilkannya.
-        if (data.editable && Object.keys(data.editable).length) {
-          Stage2.populateParamPanel(data);
+    if (!explanationOk) return;
+
+    // 2) Parsing parameter untuk Opsi B — best effort. Kalau endpoint ini
+    //    error/tidak tersedia di server, JANGAN sampai mengganggu hasil
+    //    Bedah EA di atas: cukup nonaktifkan tombol Opsi B.
+    try {
+      const parsed = await Stage2.explainAndParse(code, eaName || "Expert Advisor");
+      if (parsed && parsed.success && parsed.editable && Object.keys(parsed.editable).length) {
+        Stage2.populateParamPanel(parsed);
+        if (btnOptionB) {
+          btnOptionB.disabled = false;
+          btnOptionB.title = "";
         }
-        // Tampilkan kartu pilihan: A. Default EA, B. Parameter Manual.
-        if (choiceCard) choiceCard.style.display = 'block';
+      } else {
+        if (btnOptionB) {
+          btnOptionB.disabled = true;
+          btnOptionB.title = "Parsing parameter tidak tersedia untuk EA ini.";
+        }
       }
     } catch (e) {
-      box.innerText = "Terjadi kesalahan koneksi ke AI Explainer.";
+      console.warn("Parsing parameter untuk Opsi B gagal (Opsi A tetap jalan):", e);
+      if (btnOptionB) {
+        btnOptionB.disabled = true;
+        btnOptionB.title = "Parsing parameter gagal. Endpoint /api/explain-and-parse bermasalah di server.";
+      }
     }
+
+    if (choiceCard) choiceCard.style.display = 'block';
   }
 
   // ============================================================
