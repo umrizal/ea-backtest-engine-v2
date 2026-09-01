@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <title>EA Backtest Engine — Quantitative Trading Research Platform</title>
+  <title>Pintarin Laboratorium — EA Backtest Engine</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
@@ -313,8 +313,8 @@
   <aside class="sidebar">
     <div class="brand">
       <div class="brand-icon">⚡</div>
-      <h1>EA BACKTEST</h1>
-      <span>ENGINE v3.0</span>
+      <h1>PINTARIN</h1>
+      <span>Laboratorium EA</span>
     </div>
     <div class="nav-section">Terminal Navigation</div>
     <nav class="nav">
@@ -340,8 +340,8 @@
   <main class="main">
     <div class="topbar">
       <div class="page-title">
-        <h2>EA Backtest Engine</h2>
-        <p>Quantitative Trading Research Platform &amp; MQL5 Simulation Engine</p>
+        <h2>Pintarin Laboratorium</h2>
+        <p>EA Backtest Engine &amp; MQL5 Simulation Platform</p>
       </div>
       <div class="actions">
         <button class="btn" onclick="fetchHistoryData()">🔄 Reload Histori DB</button>
@@ -940,7 +940,9 @@
   // CHART RENDERING
   // ============================================================
   function renderChart(curve) {
-    const ctx = document.getElementById('chartEquity').getContext('2d');
+    const canvas = document.getElementById('chartEquity');
+    if (!canvas) return; // canvas not in DOM — equity chart handled by Plotly renderChartWithMarkers
+    const ctx = canvas.getContext('2d');
     if (equityChart) equityChart.destroy();
 
     equityChart = new Chart(ctx, {
@@ -1262,8 +1264,11 @@
     document.getElementById('simPlayBtn').disabled = true;
     document.getElementById('simRestartBtn').disabled = true;
     document.getElementById('simFrameLabel').innerText = '0 / 0';
-    const ctx = document.getElementById('simCandleCanvas').getContext('2d');
-    ctx.clearRect(0, 0, 1200, 360);
+    const simCanvas = document.getElementById('simCandleCanvas');
+    if (simCanvas) {
+      const ctx = simCanvas.getContext('2d');
+      ctx.clearRect(0, 0, 1200, 360);
+    }
   }
 
   function simTogglePlay() {
@@ -1312,7 +1317,9 @@
   }
 
   function initSimEquityChart() {
-    const ctx = document.getElementById('simEquityCanvas').getContext('2d');
+    const simCanvas = document.getElementById('simEquityCanvas');
+    if (!simCanvas) return;
+    const ctx = simCanvas.getContext('2d');
     if (simEquityChart) simEquityChart.destroy();
     simEquityChart = new Chart(ctx, {
       type: 'line',
@@ -1484,6 +1491,7 @@
 
   function drawCandles(slice, trades = []) {
     const canvas = document.getElementById('simCandleCanvas');
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
     const w = canvas.width, h = canvas.height;
     ctx.clearRect(0, 0, w, h);
@@ -1743,7 +1751,9 @@
 
   let mt5Charts = [];
   function renderMiniBarChart(canvasId, labels, data) {
-    const ctx = document.getElementById(canvasId).getContext('2d');
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) { console.warn('Canvas not found:', canvasId); return; }
+    const ctx = canvas.getContext('2d');
     const chart = new Chart(ctx, {
       type: 'bar',
       data: {
