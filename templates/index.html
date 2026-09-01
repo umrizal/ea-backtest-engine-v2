@@ -240,6 +240,21 @@
     .mt5-charts-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 20px; }
     .mt5-chart-box { background: #0a0f1a; border: 1px solid var(--border-soft); border-radius: var(--radius-sm); padding: 12px; }
     .mt5-chart-title { text-align: center; font-size: 10px; color: var(--text-muted); margin-top: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+    .mt5-section-title { font-size: 11px; font-weight: 800; color: var(--gold); text-transform: uppercase; letter-spacing: 0.08em; padding: 10px 0 6px; border-bottom: 1px solid var(--border-soft); margin-top: 16px; margin-bottom: 4px; }
+    .mt5-summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+    .mt5-summary-card { background: var(--bg-soft); border: 1px solid var(--border-soft); border-radius: var(--radius-sm); padding: 14px 16px; }
+    .mt5-summary-card .label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+    .mt5-summary-card .value { font-size: 22px; font-weight: 800; font-family: var(--font-mono); }
+    .mt5-summary-card.profit .value { color: var(--green); }
+    .mt5-summary-card.loss .value { color: var(--red); }
+    .mt5-summary-card.neutral .value { color: var(--gold); }
+    .mt5-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .mt5-badge { padding: 4px 10px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+    .mt5-badge.verified { background: rgba(34,197,94,0.12); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
+    .mt5-badge.moderate { background: rgba(245,158,11,0.12); color: var(--yellow); border: 1px solid rgba(245,158,11,0.3); }
+    .mt5-badge.risk { background: rgba(244,63,94,0.12); color: var(--red); border: 1px solid rgba(244,63,94,0.3); }
+    .mt5-badge.info { background: var(--gold-dim); color: var(--gold); border: 1px solid var(--gold-glow); }
+    .mt5-badge.strategy { background: rgba(59,130,246,0.12); color: var(--blue); border: 1px solid rgba(59,130,246,0.3); }
 
     /* ==================== TERMINAL HEADER ==================== */
     .terminal-header {
@@ -556,6 +571,7 @@
           </div>
           <button class="btn primary" onclick="loadFullReport()">📄 Tampilkan Report</button>
           <button class="btn blue" onclick="openMT5Report()">🖨️ Buka HTML Report MT5</button>
+          <button class="btn green" onclick="autoLoadLatestReport()">⚡ Auto Load Latest</button>
         </div>
         <div id="fullReportBox">
           <div class="empty-state">
@@ -1633,43 +1649,67 @@
   }
 
   const MT5_ROW_GROUPS = [
-    [{ label: 'Bars', keys: ['bars'] }, { label: 'Ticks', keys: ['ticks'] }, { label: 'Symbols', keys: ['symbols'] }],
-    [{ label: 'Initial Deposit', keys: ['initial_deposit', 'initial_balance'] }, null, null],
-    [{ label: 'Total Net Profit', keys: ['total_net_profit', 'net_profit'] },
-     { label: 'Balance Drawdown Absolute', keys: ['balance_drawdown_absolute'] },
+    // Section: Settings
+    [{ label: 'Bars', keys: ['bars', 'total_rows_processed'] },
+     { label: 'Ticks', keys: ['ticks'] },
+     { label: 'Symbols', keys: ['symbols', 'symbol_raw'] }],
+    // Section: Deposit
+    [{ label: 'Initial Deposit', keys: ['initial_deposit', 'initial_balance'] },
+     { label: 'Spread', keys: ['spread'] },
+     { label: 'Leverage', keys: ['leverage'] }],
+    // Section: Net Profit & Drawdown
+    [{ label: 'Total Net Profit', keys: ['total_net_profit', 'net_profit', 'final_balance'] },
+     { label: 'Balance Drawdown Absolute', keys: ['balance_drawdown_absolute', 'max_drawdown_val'] },
      { label: 'Equity Drawdown Absolute', keys: ['equity_drawdown_absolute'] }],
     [{ label: 'Gross Profit', keys: ['gross_profit'] },
-     { label: 'Balance Drawdown Maximal', keys: ['balance_drawdown_maximal'] },
+     { label: 'Balance Drawdown Maximal', keys: ['balance_drawdown_maximal', 'max_drawdown_pct'] },
      { label: 'Equity Drawdown Maximal', keys: ['equity_drawdown_maximal'] }],
     [{ label: 'Gross Loss', keys: ['gross_loss'] },
      { label: 'Balance Drawdown Relative', keys: ['balance_drawdown_relative'] },
      { label: 'Equity Drawdown Relative', keys: ['equity_drawdown_relative'] }],
+    // Section: Ratios
     [{ label: 'Profit Factor', keys: ['profit_factor'] },
-     { label: 'Expected Payoff', keys: ['expected_payoff'] },
+     { label: 'Expected Payoff', keys: ['expected_payoff', 'expectancy'] },
      { label: 'Margin Level', keys: ['margin_level'] }],
     [{ label: 'Recovery Factor', keys: ['recovery_factor'] },
-     { label: 'Sharpe Ratio', keys: ['sharpe_ratio'] },
+     { label: 'Sharpe Ratio', keys: ['sharpe_ratio', 'sortino_ratio'] },
      { label: 'Z-Score', keys: ['z_score'] }],
     [{ label: 'AHPR', keys: ['ahpr'] },
      { label: 'LR Correlation', keys: ['lr_correlation'] },
      { label: 'OnTester Result', keys: ['ontester_result', 'on_tester_result'] }],
-    [{ label: 'GHPR', keys: ['ghpr'] }, { label: 'LR Standard Error', keys: ['lr_standard_error'] }, null],
+    [{ label: 'GHPR', keys: ['ghpr'] },
+     { label: 'LR Standard Error', keys: ['lr_standard_error'] },
+     { label: 'Scientific Score', keys: ['scientific_score'] }],
+    // Section: Trades
     [{ label: 'Total Trades', keys: ['total_trades'] },
      { label: 'Short Trades (won %)', keys: ['short_trades_won_pct', 'short_trades'] },
      { label: 'Long Trades (won %)', keys: ['long_trades_won_pct', 'long_trades'] }],
     [{ label: 'Total Deals', keys: ['total_deals'] },
-     { label: 'Profit Trades (% of total)', keys: ['profit_trades_pct', 'profit_trades'] },
-     { label: 'Loss Trades (% of total)', keys: ['loss_trades_pct', 'loss_trades'] }],
-    [{ label: 'Largest Profit Trade', keys: ['largest_profit_trade'] },
-     { label: 'Largest Loss Trade', keys: ['largest_loss_trade'] }, null],
-    [{ label: 'Average Profit Trade', keys: ['average_profit_trade'] },
-     { label: 'Average Loss Trade', keys: ['average_loss_trade'] }, null],
+     { label: 'Profit Trades (% of total)', keys: ['profit_trades_pct', 'win_rate'] },
+     { label: 'Loss Trades (% of total)', keys: ['loss_trades_pct', 'loss_rate'] }],
+    // Section: Extrema
+    [{ label: 'Largest Profit Trade', keys: ['largest_profit_trade', 'top1_trade'] },
+     { label: 'Largest Loss Trade', keys: ['largest_loss_trade'] },
+     { label: 'Average Profit Trade', keys: ['average_profit_trade', 'avg_win'] }],
+    [{ label: 'Average Loss Trade', keys: ['average_loss_trade', 'avg_loss'] },
+     { label: 'Average Consecutive Wins', keys: ['average_consecutive_wins'] },
+     { label: 'Average Consecutive Losses', keys: ['average_consecutive_losses'] }],
     [{ label: 'Max Consecutive Wins ($)', keys: ['max_consecutive_wins_amount', 'maximum_consecutive_wins'] },
-     { label: 'Max Consecutive Losses ($)', keys: ['max_consecutive_losses_amount', 'maximum_consecutive_losses'] }, null],
-    [{ label: 'Max Consecutive Profit (count)', keys: ['max_consecutive_profit_count', 'maximal_consecutive_profit_count'] },
-     { label: 'Max Consecutive Loss (count)', keys: ['max_consecutive_loss_count', 'maximal_consecutive_loss_count'] }, null],
-    [{ label: 'Average Consecutive Wins', keys: ['average_consecutive_wins'] },
-     { label: 'Average Consecutive Losses', keys: ['average_consecutive_losses'] }, null]
+     { label: 'Max Consecutive Losses ($)', keys: ['max_consecutive_losses_amount', 'maximum_consecutive_losses'] },
+     { label: 'Max Consecutive Profit (count)', keys: ['max_consecutive_profit_count', 'maximal_consecutive_profit_count'] }],
+    [{ label: 'Max Consecutive Loss (count)', keys: ['max_consecutive_loss_count', 'maximal_consecutive_loss_count'] },
+     { label: 'Maximal Profit (count)', keys: ['maximal_profit_count'] },
+     { label: 'Maximal Loss (count)', keys: ['maximal_loss_count'] }],
+    // Section: Additional Metrics
+    [{ label: 'Calmar Ratio', keys: ['calmar_ratio'] },
+     { label: 'Top 5 Concentration %', keys: ['top5_concentration_pct'] },
+     { label: 'Jackpot Dependent', keys: ['is_jackpot_dependent'] }],
+    [{ label: 'Engine Version', keys: ['engine_version'] },
+     { label: 'Strategy Type', keys: ['strategy_type'] },
+     { label: 'Backtest Duration (s)', keys: ['backtest_duration_seconds'] }],
+    [{ label: 'Start Date', keys: ['start_date'] },
+     { label: 'End Date', keys: ['end_date'] },
+     { label: 'Data File Count', keys: ['data_file_count'] }]
   ];
 
   function aggregateTradesByPeriod(trades) {
@@ -1707,18 +1747,133 @@
     mt5Charts.push(chart);
   }
 
+  function computeMT5ExtendedMetrics(m, trades) {
+    // Compute additional MT5-style metrics from trades data
+    const t = normalizeTrades(trades || []);
+    const closed = t.filter(x => x._profit !== 0 || x._openTime !== '-');
+    const profits = closed.map(x => x._profit);
+    const wins = profits.filter(p => p > 0);
+    const losses = profits.filter(p => p < 0);
+    const netProfit = profits.reduce((a, b) => a + b, 0);
+    const grossProfit = wins.reduce((a, b) => a + b, 0);
+    const grossLoss = Math.abs(losses.reduce((a, b) => a + b, 0));
+    const initBal = toNumber(mtFind(m, ['initial_balance', 'initial_deposit']));
+    const finalBal = toNumber(mtFind(m, ['final_balance']));
+
+    // Long/Short breakdown
+    const longs = closed.filter(x => x._direction === 'BUY');
+    const longWins = longs.filter(x => x._profit > 0).length;
+    const shorts = closed.filter(x => x._direction === 'SELL');
+    const shortWins = shorts.filter(x => x._profit > 0).length;
+
+    // Consecutive streaks
+    let maxConsecWin = 0, maxConsecLoss = 0, curWin = 0, curLoss = 0;
+    let maxConsecWinAmt = 0, maxConsecLossAmt = 0, curWinAmt = 0, curLossAmt = 0;
+    for (const p of profits) {
+      if (p > 0) {
+        curWin++; curLoss = 0;
+        curWinAmt += p; curLossAmt = 0;
+        if (curWin > maxConsecWin) maxConsecWin = curWin;
+        if (curWinAmt > maxConsecWinAmt) maxConsecWinAmt = curWinAmt;
+      } else if (p < 0) {
+        curLoss++; curWin = 0;
+        curLossAmt += Math.abs(p); curWinAmt = 0;
+        if (curLoss > maxConsecLoss) maxConsecLoss = curLoss;
+        if (curLossAmt > maxConsecLossAmt) maxConsecLossAmt = curLossAmt;
+      }
+    }
+
+    // Largest trade
+    const largestProfit = profits.length ? Math.max(...profits) : 0;
+    const largestLoss = profits.length ? Math.min(...profits) : 0;
+    const avgWin = wins.length ? wins.reduce((a,b) => a+b, 0) / wins.length : 0;
+    const avgLoss = losses.length ? Math.abs(losses.reduce((a,b) => a+b, 0) / losses.length) : 0;
+    const avgTrade = profits.length ? netProfit / profits.length : 0;
+
+    return {
+      'largest_profit_trade': largestProfit,
+      'largest_loss_trade': largestLoss,
+      'average_profit_trade': avgWin,
+      'average_loss_trade': avgLoss,
+      'max_consecutive_wins_amount': maxConsecWinAmt,
+      'max_consecutive_losses_amount': maxConsecLossAmt,
+      'max_consecutive_profit_count': maxConsecWin,
+      'max_consecutive_loss_count': maxConsecLoss,
+      'average_consecutive_wins': profits.length ? (maxConsecWin > 0 ? Math.round(profits.filter(p=>p>0).length / Math.ceil(maxConsecWin)) : 0) : 0,
+      'average_consecutive_losses': profits.length ? (maxConsecLoss > 0 ? Math.round(profits.filter(p=>p<0).length / Math.ceil(maxConsecLoss)) : 0) : 0,
+      'short_trades': `${shorts.length} (${shorts.length ? Math.round(shortWins/shorts.length*100) : 0}%)`,
+      'long_trades': `${longs.length} (${longs.length ? Math.round(longWins/longs.length*100) : 0}%)`,
+      'profit_trades_pct': `${wins.length} (${wins.length ? Math.round(wins.length/profits.length*100) : 0}%)`,
+      'loss_trades_pct': `${losses.length} (${losses.length ? Math.round(losses.length/profits.length*100) : 0}%)`,
+      'expected_payoff': avgTrade,
+      'total_net_profit': netProfit,
+      'gross_profit': grossProfit,
+      'gross_loss': grossLoss,
+      'total_trades': closed.length,
+      'initial_deposit': initBal,
+      'final_balance': finalBal || (initBal + netProfit),
+      'bars': mtFind(m, ['total_rows_processed', 'bars']) || 0,
+      'symbols': mtFind(m, ['symbol_raw', 'symbols']) || '-',
+    };
+  }
+
+  function autoLoadLatestReport() {
+    const sel = document.getElementById('reportJobSelect');
+    if (sel.options.length > 1) {
+      sel.selectedIndex = 1;
+      loadFullReport();
+    } else {
+      if (currentJobId) {
+        sel.value = currentJobId;
+        loadFullReport();
+      } else {
+        alert('Belum ada job tersedia. Jalankan backtest terlebih dahulu.');
+      }
+    }
+  }
+
   function renderFullReportMetrics(m, jobId, trades) {
     const box = document.getElementById('fullReportBox');
     mt5Charts.forEach(c => c.destroy());
     mt5Charts = [];
 
-    const rowsHtml = MT5_ROW_GROUPS.map(group => {
-      const cells = group.map(cell => cell
-        ? `<td class="mt5-label">${escapeHtml(cell.label)}</td><td class="mt5-value">${escapeHtml(mtFormat(mtFind(m, cell.keys)))}</td>`
-        : '<td class="mt5-label"></td><td class="mt5-value"></td>'
-      ).join('');
-      return `<tr>${cells}</tr>`;
-    }).join('');
+    // Merge computed metrics with API data
+    const computed = computeMT5ExtendedMetrics(m, trades);
+    const merged = Object.assign({}, m, computed);
+
+    // Build row groups with section headers
+    const sections = [
+      { title: 'Backtest Settings', rows: [0, 1] },
+      { title: 'Net Profit & Drawdown', rows: [2, 3, 4] },
+      { title: 'Performance Ratios', rows: [5, 6, 7, 8] },
+      { title: 'Trades Summary', rows: [9, 10] },
+      { title: 'Extreme Values & Averages', rows: [11, 12, 13, 14] },
+      { title: 'Additional Metrics', rows: [15, 16, 17] }
+    ];
+
+    let rowsHtml = '';
+    for (const sec of sections) {
+      rowsHtml += `<tr><td colspan="6" class="mt5-section-title">${sec.title}</td></tr>`;
+      for (const idx of sec.rows) {
+        if (idx >= MT5_ROW_GROUPS.length) break;
+        const group = MT5_ROW_GROUPS[idx];
+        const cells = group.map(cell => cell
+          ? `<td class="mt5-label">${escapeHtml(cell.label)}</td><td class="mt5-value">${escapeHtml(mtFormat(mtFind(merged, cell.keys)))}</td>`
+          : '<td class="mt5-label"></td><td class="mt5-value"></td>'
+        ).join('');
+        rowsHtml += `<tr>${cells}</tr>`;
+      }
+    }
+
+    // Summary cards
+    const netProfit = toNumber(computed.total_net_profit);
+    const profitClass = netProfit > 0 ? 'profit' : (netProfit < 0 ? 'loss' : 'neutral');
+    const winRate = toNumber(mtFind(merged, ['win_rate']));
+    const pf = toNumber(mtFind(merged, ['profit_factor']));
+    const ddPct = toNumber(mtFind(merged, ['max_drawdown_pct']));
+    const statusLabel = String(mtFind(merged, ['status_label']) || 'N/A');
+    const statusClass = statusLabel.includes('VERIFIED') ? 'verified' : (statusLabel.includes('MODERATE') ? 'moderate' : 'risk');
+    const strategyType = String(mtFind(merged, ['strategy_type']) || 'unknown');
 
     const hqRaw = mtFind(m, ['history_quality']);
     const hqPct = parseFloat(String(hqRaw ?? '0').replace('%', '')) || 0;
@@ -1727,16 +1882,45 @@
 
     box.innerHTML = `
       <div class="mt5-report">
-        <div style="margin-bottom:10px; font-family: var(--font-mono); font-size:11px; color: var(--text-muted);">Job ID: ${escapeHtml(jobId)}</div>
+        <div style="margin-bottom:10px; font-family: var(--font-mono); font-size:11px; color: var(--text-muted);">
+          Job ID: ${escapeHtml(jobId)} | EA: ${escapeHtml(String(mtFind(m, ['ea_name']) || mtFind(m, ['params', 'ea_name']) || 'EA_MQL5'))}
+        </div>
+
+        <div class="mt5-badges">
+          <span class="mt5-badge ${statusClass}">${escapeHtml(statusLabel)}</span>
+          <span class="mt5-badge strategy">${escapeHtml(strategyType)}</span>
+          <span class="mt5-badge info">Score: ${escapeHtml(mtFormat(mtFind(merged, ['scientific_score'])))}</span>
+          <span class="mt5-badge ${profitClass === 'profit' ? 'verified' : (profitClass === 'loss' ? 'risk' : 'moderate')}">PF: ${escapeHtml(mtFormat(pf))}</span>
+          <span class="mt5-badge info">DD: ${escapeHtml(mtFormat(ddPct))}%</span>
+        </div>
+
+        <div class="mt5-summary-grid">
+          <div class="mt5-summary-card ${profitClass}">
+            <div class="label">Net Profit</div>
+            <div class="value">${money(netProfit)}</div>
+          </div>
+          <div class="mt5-summary-card neutral">
+            <div class="label">Win Rate</div>
+            <div class="value">${winRate.toFixed(1)}%</div>
+          </div>
+          <div class="mt5-summary-card ${profitClass}">
+            <div class="label">Total Trades</div>
+            <div class="value">${toNumber(computed.total_trades)}</div>
+          </div>
+        </div>
+
         ${hqRaw !== undefined ? `
         <div class="mt5-hq-row">
           <span style="color:var(--text-muted); font-size:11px; white-space:nowrap;">History Quality</span>
           <div class="mt5-hq-bar-track"><div class="mt5-hq-bar-fill" style="width:${Math.min(100, Math.max(0, hqPct))}%;"></div></div>
           <span class="mono" style="font-weight:700;">${escapeHtml(String(hqRaw))}</span>
         </div>` : ''}
-        <div class="table-wrap" style="max-height:520px;">
+
+        <div class="table-wrap" style="max-height:600px;">
           <table class="mt5-grid-table"><tbody>${rowsHtml}</tbody></table>
         </div>
+
+        <div class="mt5-section-title">Profit/Loss Distribution</div>
         <div class="mt5-charts-grid">
           <div class="mt5-chart-box">
             <canvas id="mt5ChartHours" height="140"></canvas>
@@ -1752,16 +1936,17 @@
           </div>
         </div>
         ${!hasTradeDist ? '<p style="color:var(--text-muted); font-size:11px; text-align:center; margin-top:10px;">Distribusi per jam/hari/bulan butuh daftar trade (open/close time) untuk job ini.</p>' : ''}
+
         <details style="margin-top:18px;">
           <summary style="cursor:pointer; color:var(--text-muted); font-size:11px;">Lihat data mentah dari API (JSON)</summary>
           <div class="table-wrap" style="max-height:300px; margin-top:8px;">
-            <table><tbody>${Object.keys(m).map(k => `<tr><td style="color:var(--text-muted); font-size:10px; font-weight:700; text-transform:uppercase;">${escapeHtml(String(k).replace(/_/g, ' '))}</td><td class="mono">${escapeHtml(JSON.stringify(m[k]))}</td></tr>`).join('')}</tbody></table>
+            <table><tbody>${Object.keys(merged).sort().map(k => `<tr><td style="color:var(--text-muted); font-size:10px; font-weight:700; text-transform:uppercase;">${escapeHtml(String(k).replace(/_/g, ' '))}</td><td class="mono">${escapeHtml(JSON.stringify(merged[k]))}</td></tr>`).join('')}</tbody></table>
           </div>
         </details>
       </div>
     `;
 
-    renderMiniBarChart('mt5ChartHours', Array.from({ length: 24 }, (_, i) => i), dist.hours);
+    renderMiniBarChart('mt5ChartHours', Array.from({ length: 24 }, (_, i) => String(i)), dist.hours);
     renderMiniBarChart('mt5ChartWeekdays', ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], dist.weekdays);
     renderMiniBarChart('mt5ChartMonths', ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], dist.months);
   }

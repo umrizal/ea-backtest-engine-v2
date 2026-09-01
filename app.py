@@ -475,10 +475,12 @@ def run_backtest():
         if hasattr(engine, 'run_backtest'):
             results = engine.run_backtest(
                 mql5_code=mql5_code,
-                file_path=data_path,
-                initial_balance=initial_balance,
+                ea_name=body.get('ea_name', 'EA_MQL5'),
+                symbol=body.get('symbol', 'XAUUSD'),
                 start_date=start_date,
-                end_date=end_date
+                end_date=end_date,
+                balance=initial_balance,
+                lot=float(body.get('lot', 0.1))
             )
         elif hasattr(engine, 'run'):
             results = engine.run(body, progress_callback=progress_cb)

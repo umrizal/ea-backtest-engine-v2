@@ -19,10 +19,12 @@ class IndicatorEngine:
 
     @staticmethod
     def ema(series, period):
+        series = _ensure_series(series)
         return series.ewm(span=period, adjust=False).mean().to_numpy()
 
     @staticmethod
     def rsi(series, period=14):
+        series = _ensure_series(series)
         delta = series.diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=period, min_periods=1).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=period, min_periods=1).mean()
@@ -31,6 +33,7 @@ class IndicatorEngine:
 
     @staticmethod
     def macd(series, fast=12, slow=26, signal=9):
+        series = _ensure_series(series)
         ema_fast = series.ewm(span=fast, adjust=False).mean()
         ema_slow = series.ewm(span=slow, adjust=False).mean()
         macd_line = ema_fast - ema_slow

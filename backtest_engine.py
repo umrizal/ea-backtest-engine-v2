@@ -2265,20 +2265,22 @@ class BacktestEngine:
 
         elif strategy == "alligator":
 
+            close_s = _ensure_series(close)
+
             jaw = (
-                close
+                close_s
                 .rolling(13)
                 .mean()
             )
 
             teeth = (
-                close
+                close_s
                 .rolling(8)
                 .mean()
             )
 
             lips = (
-                close
+                close_s
                 .rolling(5)
                 .mean()
             )
