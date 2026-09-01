@@ -411,19 +411,31 @@ def upload_ea():
 
 @app.route('/api/run-backtest', methods=['POST'])
 def run_backtest():
+    """
+    Run backtest — hybrid mode:
+    - Runs synchronously (since frontend expects immediate results)
+    - Also stores result in JOBS dict for later retrieval via status/result endpoints
+    """
     try:
-        data = request.json or {}
-        
+        body = request.json or {}
+
         # Menerima kode MQL5 dari payload JS
-        mql5_code = data.get('code') or data.get('mql5_code', '')
+        mql5_code = body.get('code') or body.get('mql5_code', '')
         if not mql5_code or not str(mql5_code).strip():
             return jsonify({
                 "success": False,
                 "error": "Kode MQL5 tidak ditemukan. Harap paste kode atau upload file EA."
             }), 400
 
+        # Default params
+        body.setdefault("symbol", "XAUUSD")
+        body.setdefault("start_date", "2024-01-01")
+        body.setdefault("end_date", "2024-12-31")
+        body.setdefault("balance", 10000.0)
+        body.setdefault("lot", 0.1)
+
         # Penentuan file data CSV
-        data_file = data.get('data_file') or data.get('symbol', '')
+        data_file = body.get('data_file') or body.get('symbol', '')
         if not str(data_file).endswith('.csv'):
             data_file = "XAUUSD_H1_202601020100_202608280200.csv"
 
@@ -433,9 +445,31 @@ def run_backtest():
         engine = BacktestEngine(file_path=data_path)
 
         # Parameter untuk simulasi
-        initial_balance = float(data.get('initial_balance') or data.get('balance') or 10000)
-        start_date = data.get('start_date')
-        end_date = data.get('end_date')
+        initial_balance = float(body.get('initial_balance') or body.get('balance') or 10000)
+        start_date = body.get('start_date')
+        end_date = body.get('end_date')
+
+        # Generate job_id for tracking
+        job_id = str(uuid.uuid4())
+
+        with JOBS_LOCK:
+            JOBS[job_id] = {
+                "status": "running",
+                "progress": 10,
+                "params": body,
+                "result": None,
+                "error": None,
+                "created_at": datetime.now().isoformat(),
+                "started_at": datetime.now().isoformat(),
+                "completed_at": None
+            }
+
+        print(f"[BACKTEST] Starting job {job_id}")
+
+        # Progress callback
+        def progress_cb(val):
+            with JOBS_LOCK:
+                JOBS[job_id]["progress"] = min(100, val)
 
         # Memanggil method eksekusi secara langsung dengan fallback
         if hasattr(engine, 'run_backtest'):
@@ -447,13 +481,7 @@ def run_backtest():
                 end_date=end_date
             )
         elif hasattr(engine, 'run'):
-            results = engine.run(
-                mql5_code=mql5_code,
-                file_path=data_path,
-                initial_balance=initial_balance,
-                start_date=start_date,
-                end_date=end_date
-            )
+            results = engine.run(body, progress_callback=progress_cb)
         elif hasattr(engine, 'execute'):
             results = engine.execute(
                 mql5_code=mql5_code,
@@ -463,212 +491,61 @@ def run_backtest():
                 end_date=end_date
             )
         else:
+            with JOBS_LOCK:
+                JOBS[job_id]["status"] = "failed"
+                JOBS[job_id]["error"] = "Method eksekusi (run_backtest/run/execute) tidak ditemukan pada BacktestEngine."
+                JOBS[job_id]["completed_at"] = datetime.now().isoformat()
             return jsonify({
                 "success": False,
                 "error": "Method eksekusi (run_backtest/run/execute) tidak ditemukan pada BacktestEngine."
             }), 500
 
+        # Save to JOBS dict
+        with JOBS_LOCK:
+            JOBS[job_id]["status"] = "completed"
+            JOBS[job_id]["progress"] = 100
+            JOBS[job_id]["result"] = results
+            JOBS[job_id]["completed_at"] = datetime.now().isoformat()
+
+        # Try saving to database
+        try:
+            db.save_run(job_id, body, results)
+        except Exception as db_err:
+            print(f"[DATABASE] Save error: {db_err}")
+
+        print(f"[BACKTEST] Job {job_id} completed")
+
         return jsonify({
             "success": True,
+            "job_id": job_id,
             "report": results,
             "data": results
         }), 200
 
     except Exception as e:
+        error_trace = traceback.format_exc()
+        print("=" * 70)
+        print(f"[BACKTEST ERROR] {str(e)}")
+        print(error_trace)
+        print("=" * 70)
+
+        if 'job_id' in dir():
+            with JOBS_LOCK:
+                if job_id in JOBS:
+                    JOBS[job_id]["status"] = "failed"
+                    JOBS[job_id]["error"] = str(e)
+                    JOBS[job_id]["error_trace"] = error_trace
+                    JOBS[job_id]["completed_at"] = datetime.now().isoformat()
+
         return jsonify({
             "success": False,
             "error": str(e)
         }), 500
 
-    # ========================================================
-    # DEFAULT PARAMS
-    # ========================================================
-
-    body.setdefault(
-        "symbol",
-        "XAUUSD"
-    )
-
-    body.setdefault(
-        "start_date",
-        "2024-01-01"
-    )
-
-    body.setdefault(
-        "end_date",
-        "2024-12-31"
-    )
-
-    body.setdefault(
-        "balance",
-        10000.0
-    )
-
-    body.setdefault(
-        "lot",
-        0.1
-    )
-
-    # ========================================================
-    # JOB ID
-    # ========================================================
-
-    job_id = str(uuid.uuid4())
-
-    with JOBS_LOCK:
-
-        JOBS[job_id] = {
-
-            "status": "queued",
-
-            "progress": 0,
-
-            "params": body,
-
-            "result": None,
-
-            "error": None,
-
-            "created_at": datetime.now().isoformat(),
-
-            "started_at": None,
-
-            "completed_at": None
-        }
-
-    # ========================================================
-    # BACKGROUND WORKER
-    # ========================================================
-
-    def worker():
-
-        try:
-
-            with JOBS_LOCK:
-
-                JOBS[job_id]["status"] = "running"
-
-                JOBS[job_id]["progress"] = 10
-
-                JOBS[job_id]["started_at"] = (
-                    datetime.now().isoformat()
-                )
-
-            # ------------------------------------------------
-            # PROGRESS CALLBACK
-            # ------------------------------------------------
-
-            def progress_cb(val):
-
-                with JOBS_LOCK:
-
-                    JOBS[job_id]["progress"] = min(
-                        100,
-                        val
-                    )
-
-            # ------------------------------------------------
-            # RUN BACKTEST
-            # ------------------------------------------------
-
-            print(
-                f"[BACKTEST] Starting job {job_id}"
-            )
-
-            res = bt_engine.run(
-                body,
-                progress_callback=progress_cb
-            )
-
-            # ------------------------------------------------
-            # SAVE DATABASE
-            # ------------------------------------------------
-
-            try:
-
-                db.save_run(
-                    job_id,
-                    body,
-                    res
-                )
-
-            except Exception as db_err:
-
-                print(
-                    f"[DATABASE] Save error: {db_err}"
-                )
-
-            # ------------------------------------------------
-            # COMPLETE
-            # ------------------------------------------------
-
-            with JOBS_LOCK:
-
-                JOBS[job_id]["status"] = "completed"
-
-                JOBS[job_id]["progress"] = 100
-
-                JOBS[job_id]["result"] = res
-
-                JOBS[job_id]["completed_at"] = (
-                    datetime.now().isoformat()
-                )
-
-            print(
-                f"[BACKTEST] Job {job_id} completed"
-            )
-
-        except Exception as e:
-
-            error_trace = traceback.format_exc()
-
-            print("=" * 70)
-            print(f"[BACKTEST ERROR] Job {job_id}")
-            print("=" * 70)
-            print(error_trace)
-            print("=" * 70)
-
-            with JOBS_LOCK:
-
-                JOBS[job_id]["status"] = "failed"
-
-                JOBS[job_id]["error"] = str(e)
-
-                JOBS[job_id]["error_trace"] = (
-                    error_trace
-                )
-
-                JOBS[job_id]["completed_at"] = (
-                    datetime.now().isoformat()
-                )
-
-    thread = threading.Thread(
-        target=worker,
-        daemon=True
-    )
-
-    thread.start()
-
-    return jsonify({
-
-        "success": True,
-
-        "message": "Backtest job dimulai.",
-
-        "job_id": job_id,
-
-        "estimated_time": "30-60 detik"
-
-    }), 200
-
 
 @app.route('/chart_data/<session_id>')
 def chart_data(session_id):
-    """
-    Return chart data dengan marking entry Buy/Sell dan profit/loss.
-    """
-    from flask import jsonify
-    
+    """Return chart data dengan marking entry Buy/Sell dan profit/loss."""
     if session_id not in JOBS:
         return jsonify({"error": "Session not found"}), 404
     

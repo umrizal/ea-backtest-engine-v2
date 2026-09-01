@@ -2,150 +2,342 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <title>Pintarin Laboratorium EA — Scientific Quantitative Trading Research</title>
+  <title>EA Backtest Engine — Quantitative Trading Research Platform</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <style>
     :root {
-      --bg: #070a10; --panel: #0d131f; --border: #1a2436; --gold: #d9a75c;
-      --green: #10b981; --red: #f43f5e; --yellow: #f59e0b; --blue: #3b82f6; --text: #e2e8f0;
-      --text-muted: #64748b; --font-mono: 'JetBrains Mono', monospace; --font-sans: 'Inter', sans-serif;
+      --bg: #0b0f17; --bg-soft: #111725; --panel: #141b2b; --panel-hover: #1a2338;
+      --border: #233152; --border-soft: #1c2740;
+      --gold: #d9a75c; --gold-dim: rgba(217,167,92,0.15); --gold-glow: rgba(217,167,92,0.35);
+      --green: #22c55e; --red: #f43f5e; --yellow: #f59e0b; --blue: #3b82f6; --cyan: #06b6d4;
+      --text: #e2e8f0; --text-soft: #94a3b8; --text-muted: #64748b;
+      --font-mono: 'JetBrains Mono', 'Fira Code', monospace; --font-sans: 'Inter', system-ui, sans-serif;
+      --radius: 10px; --radius-sm: 6px;
+      --shadow: 0 4px 24px rgba(0,0,0,0.25); --shadow-lg: 0 8px 40px rgba(0,0,0,0.35);
     }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: var(--bg); color: var(--text); font-family: var(--font-sans); font-size: 13px; line-height: 1.5; }
+
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: var(--font-sans); font-size: 13px; line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::-webkit-scrollbar { width: 7px; height: 7px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--gold-dim); }
+
+    /* ==================== LAYOUT ==================== */
     .layout { display: flex; min-height: 100vh; }
-    .sidebar { width: 260px; background: #05070c; border-right: 1px solid var(--border); padding: 20px 14px; position: fixed; inset: 0 auto 0 0; z-index: 10; overflow-y: auto; }
-    .brand { text-align: center; margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 16px; }
-    .brand h1 { font-size: 16px; font-weight: 800; color: #fff; letter-spacing: 0.1em; }
-    .brand span { color: var(--gold); font-size: 10px; letter-spacing: 0.2em; display: block; margin-top: 4px; }
-    .nav-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--text-muted); margin: 16px 10px 6px; font-weight: 700; }
-    .nav button { width: 100%; text-align: left; background: none; border: none; color: #94a3b8; padding: 10px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; transition: 0.15s; margin-bottom: 4px; }
-    .nav button:hover { background: #0e1726; color: #fff; }
-    .nav button.active { background: linear-gradient(90deg, rgba(217, 167, 92, 0.2), transparent); color: #fff; border-left: 3px solid var(--gold); }
-    .main { margin-left: 260px; width: calc(100% - 260px); padding: 24px 30px; }
-    .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-    .page-title h2 { font-size: 22px; font-weight: 800; color: #fff; }
-    .page-title p { color: var(--text-muted); font-size: 11px; }
-    .actions { display: flex; gap: 10px; }
-    .btn { background: var(--panel); border: 1px solid var(--border); color: #fff; padding: 8px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: 0.2s; }
-    .btn:hover { border-color: var(--gold); color: var(--gold); }
-    .btn.primary { background: linear-gradient(135deg, #a97a30, #7c5822); border-color: var(--gold); color: #fff; }
-    .btn.blue { background: linear-gradient(135deg, #1d4ed8, #1e40af); border-color: var(--blue); color: #fff; }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .grid-control { display: grid; grid-template-columns: 380px 1fr; gap: 20px; }
-    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin-bottom: 20px; }
-    .card h3 { font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
+
+    .sidebar {
+      width: 250px; background: linear-gradient(180deg, #0a0e16 0%, #0d1320 100%);
+      border-right: 1px solid var(--border); padding: 0 12px 20px;
+      position: fixed; inset: 0 auto 0 0; z-index: 10; overflow-y: auto;
+      display: flex; flex-direction: column;
+    }
+
+    .brand {
+      text-align: center; margin-bottom: 20px; padding: 24px 12px 18px;
+      border-bottom: 1px solid var(--border-soft);
+      background: linear-gradient(135deg, rgba(217,167,92,0.04), transparent);
+    }
+    .brand-icon {
+      width: 42px; height: 42px; margin: 0 auto 10px;
+      background: linear-gradient(135deg, var(--gold), #b8862e);
+      border-radius: 11px; display: flex; align-items: center; justify-content: center;
+      font-size: 20px; box-shadow: 0 4px 12px rgba(217,167,92,0.3);
+    }
+    .brand h1 { font-size: 14px; font-weight: 800; color: #fff; letter-spacing: 0.08em; }
+    .brand span { color: var(--gold); font-size: 9px; letter-spacing: 0.2em; display: block; margin-top: 4px; text-transform: uppercase; }
+
+    .nav-section { font-size: 9px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--text-muted); margin: 18px 10px 6px; font-weight: 700; }
+
+    .nav button {
+      width: 100%; text-align: left; background: none; border: none;
+      color: var(--text-soft); padding: 10px 14px; border-radius: var(--radius-sm);
+      font-size: 12px; font-weight: 600; cursor: pointer; transition: 0.18s;
+      margin-bottom: 3px; display: flex; align-items: center; gap: 10px;
+      position: relative; font-family: var(--font-sans);
+    }
+    .nav button .nav-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+    .nav button:hover { background: var(--panel); color: #fff; }
+    .nav button.active {
+      background: linear-gradient(90deg, var(--gold-dim), transparent);
+      color: #fff; border-left: 3px solid var(--gold); padding-left: 11px;
+    }
+    .nav button.active .nav-icon { color: var(--gold); }
+
+    .sidebar-footer {
+      margin-top: auto; padding: 14px 10px; border-top: 1px solid var(--border-soft);
+      font-size: 10px; color: var(--text-muted); text-align: center;
+    }
+    .sidebar-footer .status-dot {
+      display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+      background: var(--green); margin-right: 5px; box-shadow: 0 0 6px var(--green);
+    }
+
+    .main { margin-left: 250px; width: calc(100% - 250px); padding: 22px 28px; }
+
+    /* ==================== TOPBAR ==================== */
+    .topbar {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid var(--border-soft);
+    }
+    .page-title h2 { font-size: 20px; font-weight: 800; color: #fff; letter-spacing: -0.02em; }
+    .page-title p { color: var(--text-muted); font-size: 11px; margin-top: 2px; }
+    .actions { display: flex; gap: 8px; }
+
+    /* ==================== BUTTONS ==================== */
+    .btn {
+      background: var(--panel); border: 1px solid var(--border); color: #fff;
+      padding: 8px 14px; border-radius: var(--radius-sm); font-size: 12px;
+      font-weight: 600; cursor: pointer; transition: 0.2s;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn:hover { border-color: var(--gold); color: var(--gold); background: var(--panel-hover); }
+    .btn.primary {
+      background: linear-gradient(135deg, #b8862e, #8c6420); border-color: var(--gold); color: #fff;
+    }
+    .btn.primary:hover { background: linear-gradient(135deg, #c9983a, #9c7228); box-shadow: 0 2px 12px var(--gold-glow); }
+    .btn.blue { background: linear-gradient(135deg, #2563eb, #1e40af); border-color: var(--blue); color: #fff; }
+    .btn.blue:hover { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+    .btn.danger { background: linear-gradient(135deg, #dc2626, #991b1b); border-color: var(--red); color: #fff; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ==================== GRID & CARDS ==================== */
+    .grid-control { display: grid; grid-template-columns: 360px 1fr; gap: 18px; align-items: start; }
+
+    .card {
+      background: linear-gradient(180deg, var(--panel) 0%, #111726 100%);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 18px; margin-bottom: 16px; box-shadow: var(--shadow);
+    }
+    .card h3 {
+      font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 14px;
+      display: flex; justify-content: space-between; align-items: center;
+      padding-bottom: 12px; border-bottom: 1px solid var(--border-soft);
+    }
+    .card h3 .badge { font-size: 9px; }
+
+    /* ==================== FORMS ==================== */
     .form-group { margin-bottom: 12px; }
-    label { display: block; font-size: 10px; color: var(--text-muted); margin-bottom: 4px; font-weight: 700; text-transform: uppercase; }
-    input, select, textarea { width: 100%; padding: 8px 10px; background: #070c14; border: 1px solid var(--border); color: #fff; border-radius: 4px; font-family: var(--font-mono); font-size: 12px; box-sizing: border-box; }
+    label {
+      display: block; font-size: 10px; color: var(--text-muted); margin-bottom: 5px;
+      font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    input, select, textarea {
+      width: 100%; padding: 8px 10px; background: #0a0f1a;
+      border: 1px solid var(--border); color: #fff; border-radius: var(--radius-sm);
+      font-family: var(--font-mono); font-size: 12px; box-sizing: border-box;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim); }
     input[type="date"] { color-scheme: dark; }
-    textarea { color: #10b981; resize: vertical; line-height: 1.4; }
-    .file-input-wrapper { position: relative; background: #070c14; border: 1px dashed var(--gold); border-radius: 6px; padding: 10px; text-align: center; cursor: pointer; }
+    textarea { color: #4ade80; resize: vertical; line-height: 1.4; }
+
+    .file-input-wrapper {
+      position: relative; background: #0a0f1a; border: 1px dashed var(--border);
+      border-radius: var(--radius-sm); padding: 14px; text-align: center; cursor: pointer; transition: 0.2s;
+    }
+    .file-input-wrapper:hover { border-color: var(--gold); background: rgba(217,167,92,0.04); }
     .file-input-wrapper input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-    .progress-bar { width: 100%; background: #070c14; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 12px; display: none; border: 1px solid var(--border); }
-    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--gold), #f59e0b); width: 0%; transition: width 0.2s; }
-    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px; }
-    .kpi-card { background: var(--panel); border: 1px solid var(--border); padding: 14px; border-radius: 8px; text-align: center; }
-    .kpi-card .label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; }
+
+    /* ==================== PROGRESS ==================== */
+    .progress-bar {
+      width: 100%; background: #0a0f1a; height: 6px; border-radius: 3px;
+      overflow: hidden; margin-top: 12px; display: none; border: 1px solid var(--border);
+    }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--gold), #f59e0b); width: 0%; transition: width 0.3s; }
+
+    /* ==================== KPI GRID ==================== */
+    .kpi-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px; margin-bottom: 16px;
+    }
+    .kpi-card {
+      background: linear-gradient(180deg, var(--panel) 0%, #101726 100%);
+      border: 1px solid var(--border); padding: 14px 12px; border-radius: var(--radius-sm);
+      text-align: center; transition: 0.2s; position: relative; overflow: hidden;
+    }
+    .kpi-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent); opacity: 0.5;
+    }
+    .kpi-card:hover { border-color: var(--gold); transform: translateY(-2px); }
+    .kpi-card .label { font-size: 9px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.06em; }
     .kpi-card .val { font-family: var(--font-mono); font-size: 18px; font-weight: 800; color: var(--gold); margin-top: 4px; }
-    .table-wrap { overflow-x: auto; max-height: 280px; }
+
+    /* ==================== TABLE ==================== */
+    .table-wrap { overflow-x: auto; max-height: 300px; border-radius: var(--radius-sm); }
     table { width: 100%; border-collapse: collapse; text-align: left; }
-    th, td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 12px; }
-    th { color: var(--text-muted); font-size: 10px; text-transform: uppercase; font-weight: 700; background: #070c14; position: sticky; top: 0; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--border-soft); font-size: 12px; }
+    th {
+      color: var(--text-muted); font-size: 10px; text-transform: uppercase; font-weight: 700;
+      background: #0a0f1a; position: sticky; top: 0; z-index: 2; letter-spacing: 0.04em;
+    }
     td.mono { font-family: var(--font-mono); }
-    .badge { padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; display: inline-block; }
-    .badge.green { background: rgba(16, 185, 129, 0.15); color: var(--green); border: 1px solid var(--green); }
-    .badge.red { background: rgba(244, 63, 94, 0.15); color: var(--red); border: 1px solid var(--red); }
-    .badge.yellow { background: rgba(245, 158, 11, 0.15); color: var(--yellow); border: 1px solid var(--yellow); }
+    tbody tr:hover { background: rgba(217,167,92,0.04); }
+
+    /* ==================== BADGES ==================== */
+    .badge {
+      padding: 3px 9px; border-radius: 4px; font-size: 9px; font-weight: 700;
+      text-transform: uppercase; display: inline-flex; align-items: center; gap: 4px;
+      letter-spacing: 0.04em;
+    }
+    .badge.green { background: rgba(34,197,94,0.12); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
+    .badge.red { background: rgba(244,63,94,0.12); color: var(--red); border: 1px solid rgba(244,63,94,0.3); }
+    .badge.yellow { background: rgba(245,158,11,0.12); color: var(--yellow); border: 1px solid rgba(245,158,11,0.3); }
+    .badge.blue { background: rgba(59,130,246,0.12); color: var(--blue); border: 1px solid rgba(59,130,246,0.3); }
+
+    /* ==================== VIEWS ==================== */
     .view { display: none; }
-    .view.active { display: block; }
-    .ai-box { background: #070c14; border: 1px solid #1e293b; padding: 12px; border-radius: 6px; color: #94a3b8; font-family: var(--font-mono); font-size: 11px; white-space: pre-wrap; margin-top: 10px; max-height: 400px; overflow-y: auto; }
-    .sim-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+    .view.active { display: block; animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* ==================== AI BOX ==================== */
+    .ai-box {
+      background: #0a0f1a; border: 1px solid var(--border-soft); padding: 14px;
+      border-radius: var(--radius-sm); color: var(--text-soft);
+      font-family: var(--font-mono); font-size: 11px; white-space: pre-wrap;
+      margin-top: 10px; max-height: 400px; overflow-y: auto; line-height: 1.6;
+    }
+
+    /* ==================== SIM TOOLBAR ==================== */
+    .sim-toolbar {
+      display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap;
+      padding: 10px 14px; background: #0a0f1a; border-radius: var(--radius-sm); border: 1px solid var(--border-soft);
+    }
     .sim-toolbar input[type="range"] { accent-color: var(--gold); }
-  
-    #advancedChartCard .js-plotly-plot { border-radius: 8px; overflow: hidden; }
+
+    /* ==================== CHART ==================== */
+    #advancedChartCard .js-plotly-plot { border-radius: var(--radius-sm); overflow: hidden; }
     #trading-history th { position: sticky; top: 0; z-index: 2; }
     #trading-history td, #trading-history th { white-space: nowrap; }
-    #trading-history tbody tr:hover { background: rgba(217,167,92,.06); }
+    #trading-history tbody tr:hover { background: rgba(217,167,92,0.06); }
     .trade-win { color: var(--green) !important; }
     .trade-loss { color: var(--red) !important; }
     .trade-buy { color: var(--green); font-weight: 800; }
     .trade-sell { color: var(--red); font-weight: 800; }
-    .chart-tooltip-note { font-family: var(--font-mono); }
     .sim-canvas-wrap { position: relative; }
-    .sim-axis-y { position: absolute; left: 0; top: 0; bottom: 24px; width: 62px; pointer-events: none; font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
 
-    /* Full Report EA — MT5 style */
+    /* ==================== MT5 REPORT ==================== */
     .mt5-report { font-family: var(--font-mono); }
-    .mt5-hq-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; background: #070c14; border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; }
-    .mt5-hq-bar-track { flex: 1; height: 14px; background: #1a2436; border-radius: 7px; overflow: hidden; }
+    .mt5-hq-row {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+      background: #0a0f1a; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px;
+    }
+    .mt5-hq-bar-track { flex: 1; height: 14px; background: var(--bg-soft); border-radius: 7px; overflow: hidden; }
     .mt5-hq-bar-fill { height: 100%; background: linear-gradient(90deg, #65a30d, #a3e635); }
     .mt5-grid-table { width: 100%; border-collapse: collapse; }
-    .mt5-grid-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
+    .mt5-grid-table td { padding: 7px 10px; border-bottom: 1px solid var(--border-soft); font-size: 12px; }
     .mt5-grid-table td.mt5-label { color: var(--text-muted); width: 22.66%; }
     .mt5-grid-table td.mt5-value { color: #fff; font-weight: 700; text-align: right; width: 10.66%; padding-right: 18px; }
-    .mt5-charts-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 22px; }
-    .mt5-chart-box { background: #070c14; border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
-    .mt5-chart-title { text-align: center; font-size: 10px; color: var(--text-muted); margin-top: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
-    @media (max-width: 900px) {
-      .mt5-grid-table td.mt5-label, .mt5-grid-table td.mt5-value { width: auto; }
-      .mt5-charts-grid { grid-template-columns: 1fr; }
-    }
+    .mt5-charts-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 20px; }
+    .mt5-chart-box { background: #0a0f1a; border: 1px solid var(--border-soft); border-radius: var(--radius-sm); padding: 12px; }
+    .mt5-chart-title { text-align: center; font-size: 10px; color: var(--text-muted); margin-top: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
 
-    @media (max-width: 1000px) {
-      .sidebar { width: 210px; }
-      .main { margin-left: 210px; width: calc(100% - 210px); padding: 18px; }
+    /* ==================== TERMINAL HEADER ==================== */
+    .terminal-header {
+      display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+      background: linear-gradient(90deg, var(--panel), transparent);
+      border-radius: var(--radius-sm); margin-bottom: 14px; border: 1px solid var(--border-soft);
+    }
+    .terminal-dots { display: flex; gap: 6px; }
+    .terminal-dot { width: 11px; height: 11px; border-radius: 50%; }
+    .terminal-dot.red { background: #ff5f57; }
+    .terminal-dot.yellow { background: #febc2e; }
+    .terminal-dot.green { background: #28c840; }
+    .terminal-title { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-left: 8px; }
+
+    /* ==================== EMPTY STATE ==================== */
+    .empty-state {
+      text-align: center; color: var(--text-muted); padding: 60px 20px;
+    }
+    .empty-state .empty-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.4; }
+
+    /* ==================== RESPONSIVE ==================== */
+    @media (max-width: 1100px) {
+      .sidebar { width: 220px; }
+      .main { margin-left: 220px; width: calc(100% - 220px); padding: 18px; }
       .grid-control { grid-template-columns: 1fr; }
     }
-    @media (max-width: 700px) {
+    @media (max-width: 768px) {
       .sidebar { position: static; width: 100%; height: auto; }
       .layout { display: block; }
       .main { margin-left: 0; width: 100%; }
       .topbar { flex-direction: column; align-items: flex-start; gap: 12px; }
+      .mt5-grid-table td.mt5-label, .mt5-grid-table td.mt5-value { width: auto; }
+      .mt5-charts-grid { grid-template-columns: 1fr; }
     }
-
-</style>
+  </style>
 </head>
-<script src="/static/stage2_frontend.js"></script>
-<script src="/static/stage3_frontend.js"></script>
 <body>
 
 <div class="layout">
+  <!-- SIDEBAR -->
   <aside class="sidebar">
     <div class="brand">
-      <h1>PINTARIN LAB</h1>
-      <span>QUANTITATIVE ENGINE</span>
+      <div class="brand-icon">⚡</div>
+      <h1>EA BACKTEST</h1>
+      <span>ENGINE v3.0</span>
     </div>
-    <div class="nav-label">Terminal Navigation</div>
-    <div class="nav">
-      <button class="active" id="btn-nav-backtest" onclick="switchView('backtest')">⚡ Backtest Terminal</button>
-      <button id="btn-nav-livesim" onclick="switchView('livesim')">🎬 Live Simulator (MT5 Style)</button>
-      <button id="btn-nav-fullreport" onclick="switchView('fullreport')">📑 Full Report EA</button>
-      <button id="btn-nav-leaderboard" onclick="switchView('leaderboard')">🏆 EA Leaderboard</button>
+    <div class="nav-section">Terminal Navigation</div>
+    <nav class="nav">
+      <button class="active" id="btn-nav-backtest" onclick="switchView('backtest')">
+        <span class="nav-icon">⚡</span> Backtest Terminal
+      </button>
+      <button id="btn-nav-livesim" onclick="switchView('livesim')">
+        <span class="nav-icon">🎬</span> Live Simulator
+      </button>
+      <button id="btn-nav-fullreport" onclick="switchView('fullreport')">
+        <span class="nav-icon">📑</span> Full Report EA
+      </button>
+      <button id="btn-nav-leaderboard" onclick="switchView('leaderboard')">
+        <span class="nav-icon">🏆</span> EA Leaderboard
+      </button>
+    </nav>
+    <div class="sidebar-footer">
+      <span class="status-dot"></span> Engine Online
     </div>
   </aside>
 
+  <!-- MAIN -->
   <main class="main">
     <div class="topbar">
       <div class="page-title">
-        <h2>Pintarin Laboratorium EA v3.0</h2>
-        <p>Enterprise Quantitative Platform & MQL5 Engine</p>
+        <h2>EA Backtest Engine</h2>
+        <p>Quantitative Trading Research Platform &amp; MQL5 Simulation Engine</p>
       </div>
       <div class="actions">
         <button class="btn" onclick="fetchHistoryData()">🔄 Reload Histori DB</button>
-        <button class="btn primary" id="btnOpenReport" onclick="openMT5Report()" disabled>📄 View MT5 HTML Report</button>
+        <button class="btn primary" id="btnOpenReport" onclick="openMT5Report()" disabled>📄 View MT5 Report</button>
       </div>
     </div>
 
-    <!-- VIEW BACKTEST TERMINAL -->
+    <!-- ========================================================== -->
+    <!-- VIEW: BACKTEST TERMINAL -->
+    <!-- ========================================================== -->
     <div id="view-backtest" class="view active">
       <div class="grid-control">
+        <!-- LEFT: Control Panel -->
         <div class="card">
-          <h3>⚙️ Backtest Control</h3>
-          
+          <div class="terminal-header">
+            <div class="terminal-dots">
+              <div class="terminal-dot red"></div>
+              <div class="terminal-dot yellow"></div>
+              <div class="terminal-dot green"></div>
+            </div>
+            <span class="terminal-title">backtest@engine:~$ configure</span>
+          </div>
+          <h3>⚙️ Backtest Configuration</h3>
+
           <div class="form-group">
-            <label>📁 UPLOAD FILE EA (.MQ5 / .EX5)</label>
+            <label>📁 Upload File EA (.MQ5 / .EX5)</label>
             <div class="file-input-wrapper">
               <span id="fileInputText" style="color: var(--gold); font-weight: 600;">Klik untuk Upload File EA .MQ5</span>
               <input type="file" id="fileEaInput" accept=".ex5,.mq5,.ex4,.mq4,.set,.json" onchange="handleEaUpload(this)">
@@ -154,12 +346,13 @@
           </div>
 
           <div class="form-group">
-            <label>📝 PASTE KODE MQL5 RAW (.MQ5)</label>
+            <label>📝 Paste Kode MQL5 Raw (.MQ5)</label>
             <textarea id="mql5CodeInput" rows="7" placeholder="// Paste kode EA MQL5 Anda di sini..."></textarea>
           </div>
 
-          <div class="stage2-actions" style="display: flex; gap: 10px; align-items: stretch;">
-            <button class="btn blue" style="flex:1; margin-bottom: 10px; display:flex; align-items:center; justify-content:center; text-align:center;" onclick="explainEaLogic()">🤖 Bedah EA</button>
+          <div class="form-group" style="display: flex; gap: 8px;">
+            <button class="btn blue" style="flex:1;" onclick="explainEaLogic()">🤖 Bedah EA</button>
+            <button class="btn" style="flex:1;" id="btn-stage2-parse" onclick="Stage2.analyzeCurrentEA()">🎛️ AI Kalibrasi</button>
           </div>
 
           <div class="form-group">
@@ -168,7 +361,7 @@
           </div>
 
           <div class="form-group">
-            <label>📁 FILE DATA (CSV)</label>
+            <label>📁 File Data (CSV)</label>
             <select id="dataSelect">
               <option value="">-- Memuat File Data --</option>
             </select>
@@ -176,7 +369,7 @@
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="form-group">
-              <label>⏱️ TIMEFRAME</label>
+              <label>⏱️ Timeframe</label>
               <select id="timeframeSelect">
                 <option value="M1">M1</option>
                 <option value="M5">M5</option>
@@ -204,8 +397,8 @@
             </div>
           </div>
 
-          <button class="btn primary" id="btnRun" style="width: 100%; margin-top: 10px;" onclick="runCvmBacktest()">⚡ JALANKAN BACKTEST</button>
-          <button class="btn" style="width: 100%; margin-top: 8px;" onclick="runLiveSimulation()">🎬 JALANKAN LIVE SIMULATOR (MT5 STYLE)</button>
+          <button class="btn primary" id="btnRun" style="width: 100%; margin-top: 6px;" onclick="runCvmBacktest()">⚡ JALANKAN BACKTEST</button>
+          <button class="btn blue" style="width: 100%; margin-top: 6px;" onclick="runLiveSimulation()">🎬 LIVE SIMULATOR (MT5 STYLE)</button>
 
           <div class="progress-bar" id="progressBar">
             <div class="progress-fill" id="progressFill"></div>
@@ -213,12 +406,13 @@
           <small id="statusText" style="color: var(--gold); font-size: 11px; display: block; text-align: center; margin-top: 6px;"></small>
         </div>
 
+        <!-- RIGHT: Results -->
         <div>
           <div class="kpi-grid">
-            <div class="kpi-card"><div class="label">NET PROFIT</div><div class="val" id="kpiProfit">$0</div></div>
-            <div class="kpi-card"><div class="label">PROFIT FACTOR</div><div class="val" id="kpiPF">0.0</div></div>
-            <div class="kpi-card"><div class="label">SORTINO RATIO</div><div class="val" id="kpiSortino">0.0</div></div>
-            <div class="kpi-card"><div class="label">MAX DRAWDOWN</div><div class="val" id="kpiDD">0%</div></div>
+            <div class="kpi-card"><div class="label">Net Profit</div><div class="val" id="kpiProfit">$0</div></div>
+            <div class="kpi-card"><div class="label">Profit Factor</div><div class="val" id="kpiPF">0.0</div></div>
+            <div class="kpi-card"><div class="label">Sortino Ratio</div><div class="val" id="kpiSortino">0.0</div></div>
+            <div class="kpi-card"><div class="label">Max Drawdown</div><div class="val" id="kpiDD">0%</div></div>
           </div>
 
           <div class="card" id="aiExplainerCard" style="display: none;">
@@ -227,13 +421,20 @@
           </div>
 
           <div class="card">
-            <h3>📈 Equity Curve (Tick Simulation)</h3>
-            <canvas id="chartEquity" height="110"></canvas>
+            <h3>
+              <span>📈 Equity Curve + Trade Markers</span>
+              <span id="chartSessionBadge" class="badge yellow">NO SESSION</span>
+            </h3>
+            <div id="chart-container" style="width:100%; height:420px;"></div>
+            <div id="chartEmptyState" class="empty-state" style="display:none;">
+              <div class="empty-icon">📊</div>
+              <p>Belum ada data chart untuk session ini.</p>
+            </div>
           </div>
 
           <div class="card">
             <h3>📜 Log Transaksi Terakhir</h3>
-            <div class="table-wrap">
+            <div class="table-wrap" style="max-height: 250px;">
               <table>
                 <thead>
                   <tr><th>Time</th><th>Order ID</th><th>Arah</th><th>Entry</th><th>Exit/Profit</th><th>Profit ($)</th></tr>
@@ -248,7 +449,9 @@
       </div>
     </div>
 
-    <!-- VIEW LIVE SIMULATOR -->
+    <!-- ========================================================== -->
+    <!-- VIEW: LIVE SIMULATOR -->
+    <!-- ========================================================== -->
     <div id="view-livesim" class="view">
       <div class="card">
         <h3>🎬 Live Simulator — Playback Candle-by-Candle</h3>
@@ -264,7 +467,7 @@
           <span id="simFrameLabel" style="font-family:var(--font-mono); font-size:11px;">0 / 0</span>
         </div>
 
-        <div style="display:flex; gap:16px; align-items:center; margin-bottom:10px; flex-wrap:wrap;">
+        <div style="display:flex; gap:16px; align-items:center; margin-bottom:12px; flex-wrap:wrap;">
           <span id="simStatusBadge" class="badge yellow">FLAT</span>
           <span style="font-family:var(--font-mono); font-size:12px;">Balance: <b id="simBalance">$0</b></span>
           <span style="font-family:var(--font-mono); font-size:12px;">Profit: <b id="simEquity">$0</b></span>
@@ -272,11 +475,11 @@
           <span style="font-family:var(--font-mono); font-size:12px;">Drawdown: <b id="simDD">0%</b></span>
         </div>
 
-        <canvas id="simCandleCanvas" width="1200" height="360" style="width:100%; height:520px; background:#070c14; border:1px solid var(--border); border-radius:6px; display:block;"></canvas>
+        <canvas id="simCandleCanvas" width="1200" height="360" style="width:100%; height:480px; background:#0a0f1a; border:1px solid var(--border); border-radius:var(--radius-sm); display:block;"></canvas>
 
-        <div class="card" style="margin-top:14px; padding:12px 14px;">
+        <div class="card" style="margin-top:14px; padding:12px 14px; margin-bottom: 0;">
           <h3 style="margin:0 0 8px 0; font-size:13px;">📜 Riwayat Trading (Simulasi Berjalan)</h3>
-          <div id="simTradeHistoryWrap" style="max-height:220px; overflow-y:auto; border:1px solid var(--border); border-radius:6px;">
+          <div id="simTradeHistoryWrap" style="max-height:220px; overflow-y:auto; border:1px solid var(--border-soft); border-radius:var(--radius-sm);">
             <table style="width:100%; border-collapse:collapse; font-family:var(--font-mono); font-size:11px;">
               <thead style="position:sticky; top:0; background:#0d1420;">
                 <tr style="text-align:left; color:var(--text-muted);">
@@ -301,60 +504,48 @@
           <canvas id="simEquityCanvas"></canvas>
         </div>
       </div>
+
+      <!-- Trading History also in Live Sim view for convenience -->
+      <div class="card" id="tradingHistoryCard">
+        <h3>
+          <span>📜 Trading History</span>
+          <span id="historyCountBadge" class="badge yellow">0 TRADES</span>
+        </h3>
+        <div class="sim-toolbar" style="margin-bottom:12px;">
+          <input id="historySearch" type="search" placeholder="🔎 Cari order, symbol, comment, BUY/SELL..." style="flex:1;min-width:220px;">
+          <select id="historyDirection" style="width:130px;">
+            <option value="ALL">All Direction</option>
+            <option value="BUY">BUY</option>
+            <option value="SELL">SELL</option>
+          </select>
+          <select id="historyResult" style="width:130px;">
+            <option value="ALL">All Result</option>
+            <option value="WIN">Profit</option>
+            <option value="LOSS">Loss</option>
+          </select>
+        </div>
+        <div style="overflow:auto;max-height:500px;border:1px solid var(--border-soft);border-radius:var(--radius-sm);">
+          <table id="trading-history">
+            <thead>
+              <tr>
+                <th>No</th><th>Time Open</th><th>Time Close</th><th>Type</th>
+                <th>Symbol</th><th>Lot</th><th>Entry</th><th>Close</th>
+                <th>Profit/Loss</th><th>Balance</th><th>Comment</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:30px;">
+                Jalankan backtest untuk menampilkan trading history.
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
-
-          <div class="card" id="advancedChartCard">
-            <h3>
-              <span>📊 Equity Curve + Trade Markers</span>
-              <span id="chartSessionBadge" class="badge yellow">NO SESSION</span>
-            </h3>
-            <div id="chart-container" style="width:100%; height:520px;"></div>
-            <div id="chartEmptyState" style="text-align:center;color:var(--text-muted);padding:80px 20px;display:none;">
-              Belum ada data chart untuk session ini.
-            </div>
-          </div>
-
-
-          <div class="card" id="tradingHistoryCard">
-            <h3>
-              <span>📜 Trading History</span>
-              <span id="historyCountBadge" class="badge yellow">0 TRADES</span>
-            </h3>
-
-            <div class="sim-toolbar" style="margin-bottom:12px;">
-              <input id="historySearch" type="search" placeholder="🔎 Cari order, symbol, comment, BUY/SELL..." style="flex:1;min-width:220px;">
-              <select id="historyDirection" style="width:130px;">
-                <option value="ALL">All Direction</option>
-                <option value="BUY">BUY</option>
-                <option value="SELL">SELL</option>
-              </select>
-              <select id="historyResult" style="width:130px;">
-                <option value="ALL">All Result</option>
-                <option value="WIN">Profit</option>
-                <option value="LOSS">Loss</option>
-              </select>
-            </div>
-
-            <div style="overflow:auto;max-height:500px;border:1px solid var(--border);border-radius:8px;">
-              <table id="trading-history">
-                <thead>
-                  <tr>
-                    <th>No</th><th>Time Open</th><th>Time Close</th><th>Type</th>
-                    <th>Symbol</th><th>Lot</th><th>Entry</th><th>Close</th>
-                    <th>Profit/Loss</th><th>Balance</th><th>Comment</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:30px;">
-                    Jalankan backtest untuk menampilkan trading history.
-                  </td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-    <!-- VIEW FULL REPORT -->
+    <!-- ========================================================== -->
+    <!-- VIEW: FULL REPORT EA -->
+    <!-- ========================================================== -->
     <div id="view-fullreport" class="view">
       <div class="card">
         <h3>📑 Full Report — MT5 Style Analysis Matrix</h3>
@@ -367,12 +558,17 @@
           <button class="btn blue" onclick="openMT5Report()">🖨️ Buka HTML Report MT5</button>
         </div>
         <div id="fullReportBox">
-          <p style="color: var(--text-muted); text-align:center;">Pilih job dari histori atau jalankan backtest untuk melihat matriks analisa lengkap.</p>
+          <div class="empty-state">
+            <div class="empty-icon">📑</div>
+            <p>Pilih job dari histori atau jalankan backtest untuk melihat matriks analisa lengkap.</p>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- VIEW LEADERBOARD -->
+    <!-- ========================================================== -->
+    <!-- VIEW: EA LEADERBOARD -->
+    <!-- ========================================================== -->
     <div id="view-leaderboard" class="view">
       <div class="card">
         <h3>🏆 Scientific EA Leaderboard (SQLite History)</h3>
@@ -380,14 +576,9 @@
           <table>
             <thead>
               <tr>
-                <th>Job ID</th>
-                <th>EA Name</th>
-                <th>Symbol</th>
-                <th>Net Profit</th>
-                <th>Profit Factor</th>
-                <th>Sortino</th>
-                <th>Win Rate</th>
-                <th>Trades</th>
+                <th>Job ID</th><th>EA Name</th><th>Symbol</th>
+                <th>Net Profit</th><th>Profit Factor</th><th>Sortino</th>
+                <th>Win Rate</th><th>Trades</th>
               </tr>
             </thead>
             <tbody id="leaderboardTable">
@@ -400,6 +591,9 @@
 
   </main>
 </div>
+
+<script src="/static/stage2_frontend.js"></script>
+<script src="/static/stage3_frontend.js"></script>
 
 <script>
   const API_BASE = window.location.origin;
@@ -456,15 +650,16 @@
     }));
   }
 
+  // ============================================================
+  // INIT
+  // ============================================================
   document.addEventListener("DOMContentLoaded", function() {
     loadDataFiles();
 
-    // Auto-detect nama EA saat kode MQL5 diketik/ditempel
     document.getElementById('mql5CodeInput').addEventListener('input', function() {
       extractAndSetEAName(this.value);
     });
 
-    // Auto-update timeframe & tanggal saat file CSV dipilih
     document.getElementById('dataSelect').addEventListener('change', function() {
       const selectedFile = this.value;
       fetch('/api/data-files')
@@ -481,7 +676,6 @@
         });
     });
 
-    // Filter interaktif untuk Trading History (sebelumnya tidak pernah tersambung ke JS)
     const historySearchEl = document.getElementById('historySearch');
     const historyDirectionEl = document.getElementById('historyDirection');
     const historyResultEl = document.getElementById('historyResult');
@@ -490,13 +684,16 @@
     if (historyResultEl) historyResultEl.addEventListener('change', renderTradingHistoryRows);
   });
 
+  // ============================================================
+  // VIEW SWITCHING
+  // ============================================================
   function switchView(viewName) {
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
-    
+
     document.getElementById('view-' + viewName).classList.add('active');
     document.getElementById('btn-nav-' + viewName).classList.add('active');
-    
+
     if (viewName === 'leaderboard') fetchHistoryData();
     if (viewName === 'fullreport') populateReportJobSelect();
   }
@@ -510,6 +707,9 @@
     }
   }
 
+  // ============================================================
+  // DATA FILES
+  // ============================================================
   async function loadDataFiles() {
     try {
       const res = await fetch('/api/data-files');
@@ -524,17 +724,19 @@
           opt.textContent = item.filename;
           select.appendChild(opt);
         });
-
         const first = data.details[0];
         if (first.start_date) document.getElementById('startDate').value = first.start_date;
         if (first.end_date) document.getElementById('endDate').value = first.end_date;
         if (first.timeframe) document.getElementById('timeframeSelect').value = first.timeframe;
       } else {
-        select.innerHTML = '<option value="">❌ File CSV tidak ditemukan</option>';
+        select.innerHTML = '<option value="">File CSV tidak ditemukan</option>';
       }
     } catch (e) { console.error("Error loading CSV files:", e); }
   }
 
+  // ============================================================
+  // EA UPLOAD
+  // ============================================================
   async function handleEaUpload(input) {
     if (!input.files || input.files.length === 0) return;
     const file = input.files[0];
@@ -543,7 +745,7 @@
 
     const statusEl = document.getElementById('uploadStatus');
     const inputLabel = document.getElementById('fileInputText');
-    
+
     inputLabel.innerText = "📄 " + file.name;
     statusEl.innerText = '⏳ Mengunggah file EA...';
 
@@ -558,17 +760,20 @@
           extractAndSetEAName(data.mql5_code);
         }
         statusEl.innerText = `✅ EA & Kode Terdeteksi: ${data.ea_name}`;
-        statusEl.style.color = '#10b981';
+        statusEl.style.color = 'var(--green)';
       } else {
-        statusEl.innerText = '❌ Gagal upload: ' + data.message;
-        statusEl.style.color = '#f43f5e';
+        statusEl.innerText = 'Gagal upload: ' + data.message;
+        statusEl.style.color = 'var(--red)';
       }
     } catch (err) {
-      statusEl.innerText = '⚠️ Gagal upload file.';
-      statusEl.style.color = '#f59e0b';
+      statusEl.innerText = 'Gagal upload file.';
+      statusEl.style.color = 'var(--yellow)';
     }
   }
-  
+
+  // ============================================================
+  // AI EXPLAINER
+  // ============================================================
   async function explainEaLogic() {
     const code = document.getElementById('mql5CodeInput').value;
     const card = document.getElementById('aiExplainerCard');
@@ -581,7 +786,7 @@
     }
 
     card.style.display = 'block';
-    box.innerText = "⏳ AI sedang membaca & membedah struktur MQL5 serta mencari bug...";
+    box.innerText = "AI sedang membaca & membedah struktur MQL5 serta mencari bug...";
 
     try {
       const res = await fetch(`${API_BASE}/api/explain-ea`, {
@@ -590,22 +795,23 @@
         body: JSON.stringify({ code: code, file_name: eaName || "Expert Advisor" })
       });
       const data = await res.json();
-      
+
       if (data.explanation) {
         box.innerText = data.explanation;
         extractAndSetEAName(code);
       } else {
-        box.innerText = data.error || "❌ Gagal menganalisis kode.";
+        box.innerText = data.error || "Gagal menganalisis kode.";
       }
     } catch (e) {
-      box.innerText = "⚠️ Terjadi kesalahan koneksi ke AI Explainer.";
+      box.innerText = "Terjadi kesalahan koneksi ke AI Explainer.";
     }
   }
 
-function buildBacktestPayload() {
-    // Ambil isi textarea kode MQL5
-    const codeVal = (document.getElementById('mql5CodeInput') || document.getElementById('mql5Code')).value;
-
+  // ============================================================
+  // BACKTEST
+  // ============================================================
+  function buildBacktestPayload() {
+    const codeVal = document.getElementById('mql5CodeInput').value;
     return {
       code: codeVal,
       mql5_code: codeVal,
@@ -614,7 +820,7 @@ function buildBacktestPayload() {
       start_date: document.getElementById('startDate').value,
       end_date: document.getElementById('endDate').value,
       timeframe: document.getElementById('timeframeSelect') ? document.getElementById('timeframeSelect').value : "H1",
-      initial_balance: parseFloat((document.getElementById('balance') || document.getElementById('initialBalance')).value || 10000)
+      initial_balance: parseFloat(document.getElementById('balance').value || 10000)
     };
   }
 
@@ -636,7 +842,6 @@ function buildBacktestPayload() {
       pFill.style.width = '10%';
       statusText.innerText = 'Memulai proses Backtest CSV Engine...';
 
-      // Bersihkan chart/history sesi sebelumnya agar tidak tercampur antar EA
       currentTradingHistory = [];
       document.getElementById('chartSessionBadge').className = 'badge yellow';
       document.getElementById('chartSessionBadge').innerText = 'MEMPROSES...';
@@ -656,7 +861,7 @@ function buildBacktestPayload() {
 
       pFill.style.width = '100%';
       statusText.innerText = 'Backtest selesai!';
-      
+
       const report = data.report || data.data || {};
       currentJobId = data.job_id || data.session_id || report.job_id || report.session_id || currentJobId;
       currentSessionId = data.session_id || data.job_id || report.session_id || report.job_id || currentJobId;
@@ -670,14 +875,13 @@ function buildBacktestPayload() {
       renderChart(report.equity_curve || []);
       renderLogs(report.trades || []);
 
-      // FIX job/session: sebelumnya kode memanggil renderChartWithMarkers(sessionId) &
-      // renderTradingHistory(sessionId) yang tidak pernah ter-definisi, sehingga trading
-      // history TIDAK PERNAH terisi untuk EA manapun. Sekarang keduanya langsung memakai
-      // data trades & equity_curve dari response backtest yang baru saja dijalankan, jadi
-      // selalu sinkron dengan EA/job/session yang sedang aktif (tidak tercampur EA lain).
       const sessionLabel = currentSessionId || currentJobId || '-';
       renderChartWithMarkers(report.equity_curve || [], report.trades || [], sessionLabel);
       renderTradingHistory(report.trades || [], payload.initial_balance, sessionLabel);
+
+      if (typeof Stage2 !== 'undefined' && Stage2.updateKPIFromReport) {
+        Stage2.updateKPIFromReport(report);
+      }
 
     } catch (err) {
       alert('Gagal terhubung ke Server Backtest!');
@@ -701,6 +905,9 @@ function buildBacktestPayload() {
     document.getElementById('statusText').innerText = '';
   }
 
+  // ============================================================
+  // CHART RENDERING
+  // ============================================================
   function renderChart(curve) {
     const ctx = document.getElementById('chartEquity').getContext('2d');
     if (equityChart) equityChart.destroy();
@@ -712,19 +919,13 @@ function buildBacktestPayload() {
         datasets: [{
           label: 'Equity ($)',
           data: curve.map(c => c.equity || c.val || 0),
-          borderColor: '#d9a75c',
-          borderWidth: 2,
-          fill: false,
-          pointRadius: 0
+          borderColor: '#d9a75c', borderWidth: 2, fill: false, pointRadius: 0
         }]
       },
       options: {
         responsive: true,
         plugins: { legend: { display: false } },
-        scales: {
-          x: { display: false },
-          y: { grid: { color: '#1a2436' } }
-        }
+        scales: { x: { display: false }, y: { grid: { color: '#1a2436' } } }
       }
     });
   }
@@ -754,7 +955,7 @@ function buildBacktestPayload() {
   }
 
   // ============================================================
-  // ADVANCED CHART (Equity Curve + Trade Markers) — per job/session
+  // ADVANCED CHART (Plotly Equity + Trade Markers)
   // ============================================================
   function renderChartWithMarkers(equityCurve, trades, sessionLabel) {
     const badge = document.getElementById('chartSessionBadge');
@@ -789,7 +990,6 @@ function buildBacktestPayload() {
       hovertemplate: '%{x}<br>Equity: $%{y:,.2f}<extra></extra>'
     };
 
-    // Cocokkan tiap trade ke titik equity terdekat berdasarkan waktu close, untuk marker BUY/SELL
     const findEquityAt = (timeStr) => {
       if (!timeStr || !xTime.length) return yEquity[yEquity.length - 1] || 0;
       const target = new Date(timeStr).getTime();
@@ -808,7 +1008,7 @@ function buildBacktestPayload() {
     const buyTrace = {
       x: buys.map(t => t._openTime), y: buys.map(t => findEquityAt(t._openTime)),
       type: 'scatter', mode: 'markers', name: 'BUY',
-      marker: { symbol: 'triangle-up', size: 9, color: '#10b981' },
+      marker: { symbol: 'triangle-up', size: 9, color: '#22c55e' },
       text: buys.map(t => `BUY #${t.order_id || t.ticket || t._index}<br>Profit: $${t._profit.toFixed(2)}`),
       hovertemplate: '%{text}<extra></extra>'
     };
@@ -821,11 +1021,11 @@ function buildBacktestPayload() {
     };
 
     const layout = {
-      paper_bgcolor: '#0d131f', plot_bgcolor: '#0d131f',
+      paper_bgcolor: '#141b2b', plot_bgcolor: '#0a0f1a',
       font: { color: '#94a3b8', family: 'JetBrains Mono, monospace', size: 11 },
       margin: { l: 60, r: 20, t: 20, b: 50 },
-      xaxis: { title: 'Waktu (sesuai data CSV)', gridcolor: '#1a2436', type: 'date' },
-      yaxis: { title: 'Equity ($)', gridcolor: '#1a2436' },
+      xaxis: { title: 'Waktu (sesuai data CSV)', gridcolor: '#1c2740', type: 'date' },
+      yaxis: { title: 'Equity ($)', gridcolor: '#1c2740' },
       legend: { orientation: 'h', y: 1.08 },
       hovermode: 'closest'
     };
@@ -835,16 +1035,13 @@ function buildBacktestPayload() {
   }
 
   // ============================================================
-  // TRADING HISTORY TABLE — per job/session, dengan filter & running balance
+  // TRADING HISTORY TABLE
   // ============================================================
   let currentTradingHistory = [];
 
   function renderTradingHistory(trades, initialBalance, sessionLabel) {
-    const normalized = normalizeTrades(trades)
-      .slice()
-      .sort((a, b) => new Date(a._openTime) - new Date(b._openTime));
+    const normalized = normalizeTrades(trades).slice().sort((a, b) => new Date(a._openTime) - new Date(b._openTime));
 
-    // Balance berjalan = modal awal + akumulasi profit trade yang sudah close, urut waktu
     let runningBalance = toNumber(initialBalance, 10000);
     currentTradingHistory = normalized.map(t => {
       runningBalance += t._profit;
@@ -903,6 +1100,9 @@ function buildBacktestPayload() {
     }).join('');
   }
 
+  // ============================================================
+  // HISTORY / LEADERBOARD
+  // ============================================================
   async function fetchHistoryData() {
     const tbody = document.getElementById('leaderboardTable');
     tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Memuat Data Histori SQLite...</td></tr>';
@@ -910,19 +1110,19 @@ function buildBacktestPayload() {
     try {
       const res = await fetch(`${API_BASE}/api/history`);
       const data = await res.json();
-      
+
       if (data.success && data.history && data.history.length > 0) {
         tbody.innerHTML = '';
         data.history.forEach(r => {
           tbody.innerHTML += `
             <tr>
               <td class="mono">${(r.job_id || '').substring(0,8)}</td>
-              <td><b>${r.ea_name}</b></td>
-              <td>${r.symbol || 'XAUUSD'}</td>
-              <td class="mono" style="color: ${r.net_profit >= 0 ? '#10b981':'#f43f5e'}">$${r.net_profit}</td>
-              <td class="mono">${r.profit_factor}</td>
-              <td class="mono">${r.sortino_ratio || 0}</td>
-              <td class="mono">${r.win_rate}%</td>
+              <td><b>${escapeHtml(r.ea_name)}</b></td>
+              <td>${escapeHtml(r.symbol || 'XAUUSD')}</td>
+              <td class="mono" style="color: ${r.net_profit >= 0 ? 'var(--green)':'var(--red)'}">${money(r.net_profit)}</td>
+              <td class="mono">${toNumber(r.profit_factor).toFixed(2)}</td>
+              <td class="mono">${toNumber(r.sortino_ratio).toFixed(2)}</td>
+              <td class="mono">${toNumber(r.win_rate).toFixed(1)}%</td>
               <td class="mono">${r.total_trades}</td>
             </tr>
           `;
@@ -938,7 +1138,6 @@ function buildBacktestPayload() {
   // ============================================================
   // LIVE SIMULATOR
   // ============================================================
-
   let simData = null;
   let simFrameIdx = 0;
   let simPlaying = false;
@@ -956,7 +1155,7 @@ function buildBacktestPayload() {
     switchView('livesim');
     resetSimState();
     const box = document.getElementById('simMetaBox');
-    box.innerText = '⏳ Menjalankan Live Simulator — AI menganalisis strategi & indikator dari kode MQL5...';
+    box.innerText = 'Menjalankan Live Simulator — AI menganalisis strategi & indikator dari kode MQL5...';
 
     try {
       const res = await fetch(`${API_BASE}/api/simulate/run`, {
@@ -966,12 +1165,12 @@ function buildBacktestPayload() {
       });
       const data = await res.json();
       if (!data.success) {
-        box.innerText = '❌ ' + (data.message || data.error);
+        box.innerText = data.message || data.error;
         return;
       }
       pollSimStatus(data.job_id);
     } catch (e) {
-      box.innerText = '⚠️ Gagal terhubung ke server Live Simulator.';
+      box.innerText = 'Gagal terhubung ke server Live Simulator.';
     }
   }
 
@@ -983,18 +1182,18 @@ function buildBacktestPayload() {
         const data = await res.json();
         if (!data.success) { clearInterval(timer); return; }
 
-        box.innerText = `⏳ Memproses simulasi: ${data.progress}%`;
+        box.innerText = `Memproses simulasi: ${data.progress}%`;
 
         if (data.status === 'completed') {
           clearInterval(timer);
           loadSimData(jobId);
         } else if (data.status === 'failed') {
           clearInterval(timer);
-          box.innerText = '❌ Simulasi gagal: ' + (data.error || 'Terjadi kesalahan sistem');
+          box.innerText = 'Simulasi gagal: ' + (data.error || 'Terjadi kesalahan sistem');
         }
       } catch (e) {
         clearInterval(timer);
-        box.innerText = '⚠️ Koneksi ke server terputus.';
+        box.innerText = 'Koneksi ke server terputus.';
       }
     }, 800);
   }
@@ -1040,7 +1239,6 @@ function buildBacktestPayload() {
     if (!simData) return;
     simPlaying = !simPlaying;
     document.getElementById('simPlayBtn').innerText = simPlaying ? '⏸️ Pause' : '▶️ Play';
-
     if (simPlaying) {
       simTimer = setInterval(() => {
         if (simFrameIdx >= simData.frames.length - 1) {
@@ -1067,9 +1265,8 @@ function buildBacktestPayload() {
   }
 
   function simSpeedChange(val) {
-    // Slider digeser ke KANAN (nilai makin besar) = makin CEPAT.
     const raw = parseInt(val);
-    simSpeedMs = 510 - raw; // raw=10 (kiri) -> 500ms (lambat), raw=500 (kanan) -> 10ms (cepat)
+    simSpeedMs = 510 - raw;
     document.getElementById('simSpeedLabel').innerText = simSpeedMs + 'ms/candle';
     if (simPlaying) {
       clearInterval(simTimer);
@@ -1093,28 +1290,21 @@ function buildBacktestPayload() {
         datasets: [{ label: 'Equity ($)', data: [], borderColor: '#d9a75c', borderWidth: 2, fill: false, pointRadius: 0 }]
       },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,
+        responsive: true, maintainAspectRatio: false, animation: false,
         plugins: { legend: { display: false } },
         scales: {
           x: {
             display: true,
-            title: { display: true, text: 'Waktu Perjalanan EA (sesuai data CSV)', color: '#64748b', font: { size: 10 } },
+            title: { display: true, text: 'Waktu Perjalanan EA', color: '#64748b', font: { size: 10 } },
             ticks: {
-              color: '#64748b',
-              font: { family: 'JetBrains Mono, monospace', size: 9 },
-              maxRotation: 0,
-              autoSkip: true,
-              maxTicksLimit: 8,
-              callback: function (value) {
-                return formatCandleTime(this.getLabelForValue(value));
-              }
+              color: '#64748b', font: { family: 'JetBrains Mono, monospace', size: 9 },
+              maxRotation: 0, autoSkip: true, maxTicksLimit: 8,
+              callback: function(value) { return formatCandleTime(this.getLabelForValue(value)); }
             },
-            grid: { color: '#1a2436' }
+            grid: { color: '#1c2740' }
           },
           y: {
-            grid: { color: '#1a2436' },
+            grid: { color: '#1c2740' },
             ticks: { color: '#64748b', font: { family: 'JetBrains Mono, monospace', size: 10 } },
             title: { display: true, text: 'Equity ($)', color: '#64748b', font: { size: 10 } }
           }
@@ -1123,8 +1313,6 @@ function buildBacktestPayload() {
     });
   }
 
-  // Balance = modal awal + total profit dari trade yang SUDAH CLOSE sampai frame ini.
-  // Equity  = Balance + floating profit dari trade yang MASIH BERJALAN (open) di frame ini.
   function computeSimBalanceEquity(idx) {
     const f = simData.frames[idx];
     const initialBalance = (simData.meta && simData.meta.initial_balance != null)
@@ -1133,7 +1321,6 @@ function buildBacktestPayload() {
 
     const trades = normalizeTrades(simData.trades || []);
     if (!trades.length) {
-      // Fallback: backend tidak mengirim daftar trade granular, pakai nilai bawaan.
       const balanceFallback = toNumber(f.balance, initialBalance);
       const equityFallback = toNumber(f.equity, initialBalance);
       return { balance: balanceFallback, equity: equityFallback, profit: equityFallback - initialBalance, openTrades: [] };
@@ -1150,19 +1337,15 @@ function buildBacktestPayload() {
       const isOpenNow = !isNaN(openTime) && openTime <= curTime && !isClosed;
 
       if (isClosed) realizedProfit += t._profit;
-      // FIX: dulu cuma nyimpen 1 trade terakhir (openTrade = t), posisi lain yang
-      // open bersamaan jadi tidak ikut dihitung. Sekarang akumulasi SEMUA posisi terbuka.
       else if (isOpenNow) openTrades.push(t);
     });
 
     const balance = initialBalance + realizedProfit;
-    // Floating profit = total dari SEMUA trade yang sedang berjalan, bukan cuma satu
     const floating = openTrades.reduce(
-      (sum, t) => sum + toNumber(t.floating_profit ?? t.unrealized_profit ?? t._profit, 0),
-      0
+      (sum, t) => sum + toNumber(t.floating_profit ?? t.unrealized_profit ?? t._profit, 0), 0
     );
     const equity = balance + floating;
-    const profit = equity - initialBalance; // total P&L simulasi berjalan (realized + floating)
+    const profit = equity - initialBalance;
 
     return { balance, equity, profit, openTrades };
   }
@@ -1179,7 +1362,6 @@ function buildBacktestPayload() {
       return !isNaN(ot) && ot <= curTime;
     });
 
-    // Jangan render ulang tabel tiap frame kalau jumlah trade belum berubah (jaga performa playback)
     if (visible.length === simLastHistoryCount) return;
     simLastHistoryCount = visible.length;
 
@@ -1194,10 +1376,10 @@ function buildBacktestPayload() {
     body.innerHTML = visible.slice().reverse().map(t => {
       const closeTime = new Date(t._closeTime).getTime();
       const isClosed = !isNaN(closeTime) && closeTime <= curTime;
-      const dirColor = (t._direction || '').toUpperCase().includes('BUY') ? '#10b981' : '#f43f5e';
+      const dirColor = (t._direction || '').toUpperCase().includes('BUY') ? 'var(--green)' : 'var(--red)';
       const profitVal = isClosed ? t._profit : toNumber(t.floating_profit ?? t.unrealized_profit ?? t._profit, 0);
-      const profitColor = profitVal >= 0 ? '#10b981' : '#f43f5e';
-      return `<tr style="border-top:1px solid var(--border);">
+      const profitColor = profitVal >= 0 ? 'var(--green)' : 'var(--red)';
+      return `<tr style="border-top:1px solid var(--border-soft);">
         <td style="padding:5px 8px;">${t._index}</td>
         <td style="padding:5px 8px; color:${dirColor}; font-weight:700;">${t._direction || '-'}</td>
         <td style="padding:5px 8px;">${formatCandleTime(t._openTime)}</td>
@@ -1222,7 +1404,7 @@ function buildBacktestPayload() {
     document.getElementById('simBalance').innerText = money(balance);
     const profitEl = document.getElementById('simEquity');
     profitEl.innerText = (profit >= 0 ? '+' : '') + money(profit);
-    profitEl.style.color = profit >= 0 ? '#10b981' : '#f43f5e';
+    profitEl.style.color = profit >= 0 ? 'var(--green)' : 'var(--red)';
     document.getElementById('simTrades').innerText = f.trades_total;
     document.getElementById('simDD').innerText = f.drawdown + '%';
 
@@ -1244,7 +1426,6 @@ function buildBacktestPayload() {
     simEquityChart.update('none');
   }
 
-  // Format timestamp candle (dari kolom waktu CSV) menjadi label tanggal+jam yang mudah dibaca
   function formatCandleTime(t) {
     if (t === undefined || t === null || t === '') return '-';
     const d = new Date(t);
@@ -1277,10 +1458,7 @@ function buildBacktestPayload() {
     ctx.clearRect(0, 0, w, h);
     if (!slice.length) return;
 
-    // Ruang untuk keterangan sumbu Y (harga) & sumbu X (tanggal/waktu)
-    const MARGIN_LEFT = 72;
-    const MARGIN_BOTTOM = 26;
-    const MARGIN_TOP = 8;
+    const MARGIN_LEFT = 72, MARGIN_BOTTOM = 26, MARGIN_TOP = 8;
     const plotW = w - MARGIN_LEFT;
     const plotH = h - MARGIN_TOP - MARGIN_BOTTOM;
 
@@ -1292,7 +1470,6 @@ function buildBacktestPayload() {
     const cw = plotW / slice.length;
     const yOf = (p) => MARGIN_TOP + plotH - ((p - lo) / (hi - lo)) * plotH;
 
-    // --- Grid + label sumbu Y (rentang harga market) ---
     ctx.font = '10px monospace';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
@@ -1300,7 +1477,7 @@ function buildBacktestPayload() {
     for (let i = 0; i <= Y_STEPS; i++) {
       const p = lo + ((hi - lo) * i) / Y_STEPS;
       const y = yOf(p);
-      ctx.strokeStyle = '#1a2436';
+      ctx.strokeStyle = '#1c2740';
       ctx.beginPath();
       ctx.moveTo(MARGIN_LEFT, y);
       ctx.lineTo(w, y);
@@ -1309,27 +1486,23 @@ function buildBacktestPayload() {
       ctx.fillText(p.toFixed(2), MARGIN_LEFT - 8, y);
     }
 
-    // --- Candle body/wick ---
     slice.forEach((c, i) => {
       const x = MARGIN_LEFT + i * cw + cw / 2;
       const up = c.c >= c.o;
-      ctx.strokeStyle = ctx.fillStyle = up ? '#10b981' : '#f43f5e';
+      ctx.strokeStyle = ctx.fillStyle = up ? '#22c55e' : '#f43f5e';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(x, yOf(c.h));
       ctx.lineTo(x, yOf(c.l));
       ctx.stroke();
-
       const bodyTop = yOf(Math.max(c.o, c.c));
       const bodyH = Math.max(1, Math.abs(yOf(c.o) - yOf(c.c)));
       ctx.fillRect(x - cw * 0.35, bodyTop, cw * 0.7, bodyH);
     });
 
-    // --- Marker sinyal BUY/SELL (entry) + marker close (exit) per trade ---
     if (trades && trades.length) {
       const SIZE = 6;
       trades.forEach(t => {
-        // Marker ENTRY di candle waktu trade dibuka
         const openTime = new Date(t._openTime).getTime();
         if (!isNaN(openTime)) {
           const oIdx = slice.findIndex(c => new Date(c.t).getTime() === openTime);
@@ -1337,7 +1510,7 @@ function buildBacktestPayload() {
             const c = slice[oIdx];
             const x = MARGIN_LEFT + oIdx * cw + cw / 2;
             const isBuy = (t._direction || '').toUpperCase().includes('BUY');
-            ctx.fillStyle = isBuy ? '#10b981' : '#f43f5e';
+            ctx.fillStyle = isBuy ? '#22c55e' : '#f43f5e';
             ctx.beginPath();
             if (isBuy) {
               const y = yOf(c.l) + SIZE + 4;
@@ -1354,9 +1527,6 @@ function buildBacktestPayload() {
             ctx.fill();
           }
         }
-
-        // Marker EXIT di candle waktu trade ditutup - lingkaran, warna sesuai untung/rugi
-        // posisi Y pakai harga close ASLI dari trade (t._close), bukan tebakan, supaya valid
         const closeTime = new Date(t._closeTime).getTime();
         if (!isNaN(closeTime)) {
           const eIdx = slice.findIndex(c => new Date(c.t).getTime() === closeTime);
@@ -1364,8 +1534,8 @@ function buildBacktestPayload() {
             const c = slice[eIdx];
             const x = MARGIN_LEFT + eIdx * cw + cw / 2;
             const y = yOf(t._close || c.c);
-            ctx.strokeStyle = t._profit >= 0 ? '#10b981' : '#f43f5e';
-            ctx.fillStyle = '#070c14';
+            ctx.strokeStyle = t._profit >= 0 ? '#22c55e' : '#f43f5e';
+            ctx.fillStyle = '#0a0f1a';
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.arc(x, y, SIZE * 0.7, 0, Math.PI * 2);
@@ -1376,7 +1546,6 @@ function buildBacktestPayload() {
       });
     }
 
-    // --- Label sumbu X (tanggal & waktu sesuai data CSV) ---
     ctx.fillStyle = '#64748b';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
@@ -1389,14 +1558,16 @@ function buildBacktestPayload() {
     const lastIdx = slice.length - 1;
     ctx.fillText(formatCandleTime(slice[lastIdx].t), MARGIN_LEFT + lastIdx * cw + cw / 2, h - MARGIN_BOTTOM + 6);
 
-    // garis dasar sumbu X
-    ctx.strokeStyle = '#1a2436';
+    ctx.strokeStyle = '#1c2740';
     ctx.beginPath();
     ctx.moveTo(MARGIN_LEFT, h - MARGIN_BOTTOM);
     ctx.lineTo(w, h - MARGIN_BOTTOM);
     ctx.stroke();
   }
 
+  // ============================================================
+  // FULL REPORT
+  // ============================================================
   async function populateReportJobSelect() {
     const sel = document.getElementById('reportJobSelect');
     try {
@@ -1407,7 +1578,7 @@ function buildBacktestPayload() {
         data.history.forEach(r => {
           const opt = document.createElement('option');
           opt.value = r.job_id;
-          opt.innerText = `${r.ea_name} | $${r.net_profit}`;
+          opt.innerText = `${r.ea_name} | ${money(r.net_profit)}`;
           sel.appendChild(opt);
         });
       }
@@ -1424,7 +1595,7 @@ function buildBacktestPayload() {
       return;
     }
 
-    box.innerHTML = '<p style="color: var(--text-muted);">⏳ Memuat matriks analisa...</p>';
+    box.innerHTML = '<p style="color: var(--text-muted);">Memuat matriks analisa...</p>';
 
     try {
       const res = await fetch(`${API_BASE}/api/backtest-result/${jobId}`);
@@ -1432,9 +1603,6 @@ function buildBacktestPayload() {
 
       if (data.success && data.data) {
         const m = data.data;
-        // Pakai trades yang dikirim backend untuk job ini kalau ada; kalau job yang
-        // dipilih sama dengan sesi yang barusan dijalankan, pakai data trades yang
-        // sudah tersimpan di memori (currentTradingHistory) sebagai fallback.
         const trades = m.trades || ((jobId === currentJobId || jobId === currentSessionId) ? currentTradingHistory : []);
         renderFullReportMetrics(m, jobId, trades);
       } else {
@@ -1445,11 +1613,7 @@ function buildBacktestPayload() {
     }
   }
 
-  // Cocokkan nama field dari backend dengan berbagai kemungkinan penamaan
-  // (snake_case, spasi, camelCase) tanpa perlu tahu skema persis backend-nya.
-  function normalizeKey(s) {
-    return String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
-  }
+  function normalizeKey(s) { return String(s).toLowerCase().replace(/[^a-z0-9]/g, ''); }
 
   function mtFind(m, variants) {
     if (!m) return undefined;
@@ -1468,7 +1632,6 @@ function buildBacktestPayload() {
     return String(value);
   }
 
-  // Struktur baris matriks laporan gaya MT5 — 3 kolom label:value per baris.
   const MT5_ROW_GROUPS = [
     [{ label: 'Bars', keys: ['bars'] }, { label: 'Ticks', keys: ['ticks'] }, { label: 'Symbols', keys: ['symbols'] }],
     [{ label: 'Initial Deposit', keys: ['initial_deposit', 'initial_balance'] }, null, null],
@@ -1509,7 +1672,6 @@ function buildBacktestPayload() {
      { label: 'Average Consecutive Losses', keys: ['average_consecutive_losses'] }, null]
   ];
 
-  // Agregasi profit/loss per jam, per hari, per bulan dari daftar trade (waktu close sesuai CSV)
   function aggregateTradesByPeriod(trades) {
     const hours = new Array(24).fill(0);
     const weekdays = new Array(7).fill(0);
@@ -1531,17 +1693,14 @@ function buildBacktestPayload() {
       type: 'bar',
       data: {
         labels,
-        datasets: [{ data, backgroundColor: data.map(v => v >= 0 ? '#10b981' : '#f43f5e'), borderRadius: 2 }]
+        datasets: [{ data, backgroundColor: data.map(v => v >= 0 ? '#22c55e' : '#f43f5e'), borderRadius: 2 }]
       },
       options: {
         responsive: true,
-        plugins: {
-          legend: { display: false },
-          tooltip: { callbacks: { label: (c) => money(c.raw) } }
-        },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => money(c.raw) } } },
         scales: {
           x: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { display: false } },
-          y: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: '#1a2436' } }
+          y: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: '#1c2740' } }
         }
       }
     });
@@ -1578,7 +1737,6 @@ function buildBacktestPayload() {
         <div class="table-wrap" style="max-height:520px;">
           <table class="mt5-grid-table"><tbody>${rowsHtml}</tbody></table>
         </div>
-
         <div class="mt5-charts-grid">
           <div class="mt5-chart-box">
             <canvas id="mt5ChartHours" height="140"></canvas>
@@ -1594,7 +1752,6 @@ function buildBacktestPayload() {
           </div>
         </div>
         ${!hasTradeDist ? '<p style="color:var(--text-muted); font-size:11px; text-align:center; margin-top:10px;">Distribusi per jam/hari/bulan butuh daftar trade (open/close time) untuk job ini.</p>' : ''}
-
         <details style="margin-top:18px;">
           <summary style="cursor:pointer; color:var(--text-muted); font-size:11px;">Lihat data mentah dari API (JSON)</summary>
           <div class="table-wrap" style="max-height:300px; margin-top:8px;">
@@ -1610,141 +1767,5 @@ function buildBacktestPayload() {
   }
 </script>
 
-
-
-
 </body>
 </html>
-
-    <!-- MT4/MT5 Standard Report Matrix -->
-    <div class="report-matrix-container" style="background:#f4f4f4; padding:15px; font-family:Tahoma, Geneva, sans-serif; font-size:12px; border:1px solid #ccc;">
-        <table style="width:100%; border-collapse:collapse; background:#fff;" border="1" cellpadding="4" cellspacing="0">
-            <tr>
-                <td style="font-weight:bold; background:#e6e6e6;">History Quality</td>
-                <td>100%</td>
-                <td style="font-weight:bold; background:#e6e6e6;">Bars</td>
-                <td id="rep_bars">-</td>
-                <td style="font-weight:bold; background:#e6e6e6;">Ticks</td>
-                <td id="rep_ticks">-</td>
-                <td style="font-weight:bold; background:#e6e6e6;">Symbols</td>
-                <td>1</td>
-            </tr>
-            <tr>
-                <td style="font-weight:bold; background:#e6e6e6;">Initial Deposit</td>
-                <td id="rep_initial_deposit">10 000.00</td>
-                <td colspan="6"></td>
-            </tr>
-            <tr>
-                <td style="font-weight:bold; background:#e6e6e6;">Total Net Profit</td>
-                <td id="rep_net_profit">0.00</td>
-                <td style="font-weight:bold; background:#e6e6e6;">Balance Drawdown Absolute</td>
-                <td id="rep_bal_dd_abs">0.00</td>
-                <td style="font-weight:bold; background:#e6e6e6;">Equity Drawdown Absolute</td>
-                <td id="rep_eq_dd_abs">0.00</td>
-            </tr>
-            <tr>
-                <td style="font-weight:bold; background:#e6e6e6;">Gross Profit</td>
-                <td id="rep_gross_profit">0.00</td>
-                <td style="font-weight:bold; background:#e6e6e6;">Balance Drawdown Maximal</td>
-                <td id="rep_bal_dd_max">0.00 (0.00%)</td>
-                <td style="font-weight:bold; background:#e6e6e6;">Equity Drawdown Maximal</td>
-                <td id="rep_eq_dd_max">0.00 (0.00%)</td>
-            </tr>
-            <tr>
-                <td style="font-weight:bold; background:#e6e6e6;">Gross Loss</td>
-                <td id="rep_gross_loss">0.00</td>
-                <td style="font-weight:bold; background:#e6e6e6;">Balance Drawdown Relative</td>
-                <td id="rep_bal_dd_rel">0.00%</td>
-                <td style="font-weight:bold; background:#e6e6e6;">Equity Drawdown Relative</td>
-                <td id="rep_eq_dd_rel">0.00%</td>
-            </tr>
-            <tr style="border-top:2px solid #999;">
-                <td style="font-weight:bold; background:#e6e6e6;">Profit Factor</td>
-                <td id="rep_profit_factor">0.00</td>
-                <td style="font-weight:bold; background:#e6e6e6;">Expected Payoff</td>
-                <td id="rep_expected_payoff">0.00</td>
-                <td style="font-weight:bold; background:#e6e6e6;">Margin Level</td>
-                <td>9968.90%</td>
-            </tr>
-            <tr>
-                <td style="font-weight:bold; background:#e6e6e6;">Recovery Factor</td>
-                <td id="rep_recovery_factor">0.00</td>
-                <td style="font-weight:bold; background:#e6e6e6;">Sharpe Ratio</td>
-                <td id="rep_sharpe">0.00</td>
-                <td style="font-weight:bold; background:#e6e6e6;">Z-Score</td>
-                <td>0.00 (0.00%)</td>
-            </tr>
-            <tr>
-                <td style="font-weight:bold; background:#e6e6e6;">AHPR</td>
-                <td id="rep_ahpr">1.0000</td>
-                <td style="font-weight:bold; background:#e6e6e6;">LR Correlation</td>
-                <td>0.00</td>
-                <td style="font-weight:bold; background:#e6e6e6;">OnTester result</td>
-                <td>0</td>
-            </tr>
-            <tr>
-                <td style="font-weight:bold; background:#e6e6e6;">GHPR</td>
-                <td id="rep_ghpr">1.0000</td>
-                <td style="font-weight:bold; background:#e6e6e6;">LR Standard Error</td>
-                <td>0.00</td>
-                <td colspan="2"></td>
-            </tr>
-            <tr style="border-top:2px solid #999;">
-                <td style="font-weight:bold; background:#e6e6e6;">Total Trades</td>
-                <td id="rep_total_trades">0</td>
-                <td style="font-weight:bold; background:#e6e6e6;">Short Trades (won %)</td>
-                <td id="rep_short_trades">0 (0.00%)</td>
-                <td style="font-weight:bold; background:#e6e6e6;">Long Trades (won %)</td>
-                <td id="rep_long_trades">0 (0.00%)</td>
-            </tr>
-            <tr>
-                <td style="font-weight:bold; background:#e6e6e6;">Total Deals</td>
-                <td id="rep_total_deals">0</td>
-                <td style="font-weight:bold; background:#e6e6e6;">Profit Trades (% of total)</td>
-                <td id="rep_profit_trades">0 (0.00%)</td>
-                <td style="font-weight:bold; background:#e6e6e6;">Loss Trades (% of total)</td>
-                <td id="rep_loss_trades">0 (0.00%)</td>
-            </tr>
-            <tr>
-                <td></td>
-                <td style="font-weight:bold; background:#e6e6e6;">Largest</td>
-                <td>profit trade</td>
-                <td id="rep_max_win">0.00</td>
-                <td>loss trade</td>
-                <td id="rep_max_loss">0.00</td>
-            </tr>
-            <tr>
-                <td></td>
-                <td style="font-weight:bold; background:#e6e6e6;">Average</td>
-                <td>profit trade</td>
-                <td id="rep_avg_win">0.00</td>
-                <td>loss trade</td>
-                <td id="rep_avg_loss">0.00</td>
-            </tr>
-            <tr>
-                <td></td>
-                <td style="font-weight:bold; background:#e6e6e6;">Maximum</td>
-                <td>consecutive wins ($)</td>
-                <td id="rep_max_consec_win">0 (0.00)</td>
-                <td>consecutive losses ($)</td>
-                <td id="rep_max_consec_loss">0 (0.00)</td>
-            </tr>
-            <tr>
-                <td></td>
-                <td style="font-weight:bold; background:#e6e6e6;">Maximal</td>
-                <td>consecutive profit (count)</td>
-                <td id="rep_consec_profit_cnt">0.00 (0)</td>
-                <td>consecutive loss (count)</td>
-                <td id="rep_consec_loss_cnt">0.00 (0)</td>
-            </tr>
-            <tr>
-                <td></td>
-                <td style="font-weight:bold; background:#e6e6e6;">Average</td>
-                <td>consecutive wins</td>
-                <td id="rep_avg_consec_win">0</td>
-                <td>consecutive losses</td>
-                <td id="rep_avg_consec_loss">0</td>
-            </tr>
-        </table>
-    </div>
-    
