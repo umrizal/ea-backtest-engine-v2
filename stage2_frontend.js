@@ -73,7 +73,7 @@
     panel.style.marginTop = "14px";
     panel.innerHTML = `
       <h3 style="display:flex;align-items:center;gap:8px;">
-        🎛️ Parameter dari AI
+        🅱️ Opsi B — Semua Parameter Hasil Parsing EA
         <span id="stage2-strategy-badge" style="
           font-size:10px;padding:2px 8px;border-radius:999px;
           background:rgba(217,167,92,0.2);color:var(--gold);font-weight:700;
@@ -138,7 +138,10 @@
     return panel;
   }
 
-  function showParamPanel(data) {
+  // Isi panel Opsi B dengan hasil parsing, TANPA langsung menampilkannya.
+  // Dipakai setelah "Bedah EA" supaya semua parameter hasil parsing sudah
+  // siap begitu user memilih Opsi B (Parameter Manual).
+  function populateParamPanel(data) {
     const panel = ensureParamPanel();
     lastTradingLogic = data.trading_logic || {};
     lastEditable = data.editable || {};
@@ -170,7 +173,20 @@
       indEl.textContent = "Indikator: " + summary.indicators.join(", ");
     }
 
+    return panel;
+  }
+
+  // Tampilkan panel Opsi B (sudah diisi oleh populateParamPanel) & scroll ke sana.
+  function revealParamPanel() {
+    const panel = document.getElementById("stage2-param-panel") || ensureParamPanel();
     panel.style.display = "block";
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  // Kompatibilitas lama: isi + langsung tampilkan sekaligus.
+  function showParamPanel(data) {
+    populateParamPanel(data);
+    revealParamPanel();
   }
 
   function hideParamPanel() {
@@ -302,6 +318,7 @@
   async function analyzeCurrentEA() {
     // Ambil kode dari textarea atau state global
     const codeEl =
+      document.getElementById("mql5CodeInput") ||
       document.getElementById("mqlCode") ||
       document.getElementById("eaCode") ||
       document.querySelector("textarea");
@@ -351,12 +368,14 @@
   async function runWithEditedParams() {
     const code =
       window.currentMqlCode ||
+      document.getElementById("mql5CodeInput")?.value ||
       document.getElementById("mqlCode")?.value ||
       document.getElementById("eaCode")?.value ||
+      document.querySelector("textarea")?.value ||
       "";
 
     if (!code.trim()) {
-      alert("Kode EA kosong.");
+      alert("Kode EA kosong. Upload atau paste dulu.");
       return;
     }
 
@@ -438,7 +457,13 @@
     const btn = document.createElement("button");
     btn.id = "btn-stage2-parse";
     btn.className = "btn primary";
-    btn.style.marginTop = "8px";
+    btn.style.flex = "1";
+    btn.style.margin = "0 0 10px 0";
+    btn.style.display = "flex";
+    btn.style.alignItems = "center";
+    btn.style.justifyContent = "center";
+    btn.style.textAlign = "center";
+    btn.style.lineHeight = "1.2";
     btn.textContent = "🤖 AI Parse & Kalibrasi";
     btn.onclick = analyzeCurrentEA;
 
@@ -453,12 +478,17 @@
     }
   }
 
-  // Auto-init saat DOM siap
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", injectParseButton);
-  } else {
-    injectParseButton();
-  }
+  // NOTE: tombol "🎛️ AI Kalibrasi" terpisah sudah DIHAPUS dari UI (dulu
+  // menyebabkan ambigu dengan "⚡ JALANKAN BACKTEST"). Alur "Bedah EA" di
+  // index.html sekarang memanggil explainAndParse() langsung dan menampilkan
+  // kartu pilihan (Opsi A / Opsi B), jadi auto-injection tombol lama di
+  // bawah ini sengaja TIDAK dipanggil lagi supaya tombol duplikat tidak
+  // muncul kembali.
+  // if (document.readyState === "loading") {
+  //   document.addEventListener("DOMContentLoaded", injectParseButton);
+  // } else {
+  //   injectParseButton();
+  // }
 
   // Export
   window.Stage2 = {
@@ -466,6 +496,8 @@
     explainAndParse,
     runBacktestWithParams,
     showParamPanel,
+    populateParamPanel,
+    revealParamPanel,
     hideParamPanel,
     updateKPIFromReport,
     analyzeCurrentEA,

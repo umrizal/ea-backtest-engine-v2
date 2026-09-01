@@ -63,8 +63,8 @@ class ReportGenerator:
                     max_consec_loss = cur_loss
 
         # --- Metric rows helper ---
-        def metric_row(label, value, extra=""):
-            return f"<tr><td class='lbl'>{label}</td><td class='val'>{value}</td><td class='lbl'>{extra}</td><td class='val'></td></tr>"
+        def metric_row(label, value, label2="", value2=""):
+            return f"<tr><td class='lbl'>{label}</td><td class='val'>{value}</td><td class='lbl'>{label2}</td><td class='val'>{value2}</td></tr>"
 
         def fmt(v):
             if v is None or v == "":

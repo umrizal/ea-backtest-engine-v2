@@ -380,9 +380,8 @@
             <textarea id="mql5CodeInput" rows="7" placeholder="// Paste kode EA MQL5 Anda di sini..."></textarea>
           </div>
 
-          <div class="form-group" style="display: flex; gap: 8px;">
-            <button class="btn blue" style="flex:1;" onclick="explainEaLogic()">🤖 Bedah EA</button>
-            <button class="btn" style="flex:1;" id="btn-stage2-parse" onclick="Stage2.analyzeCurrentEA()">🎛️ AI Kalibrasi</button>
+          <div class="form-group">
+            <button class="btn blue" style="width:100%;" onclick="explainEaLogic()">🤖 Bedah EA (Analisa + Parsing Parameter)</button>
           </div>
 
           <div class="form-group">
@@ -450,6 +449,29 @@
             <div class="ai-box" id="aiExplainerContent">Membedah logika EA...</div>
           </div>
 
+          <div class="card" id="backtestChoiceCard" style="display: none;">
+            <h3>🎯 Pilih Mode Backtest</h3>
+            <p style="color: var(--text-muted); font-size: 11px; margin-bottom: 12px;">
+              Hasil bedah EA sudah siap. Pilih salah satu mode di bawah untuk menjalankan backtest.
+            </p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div style="border: 1px solid var(--border-soft); border-radius: var(--radius-sm); padding: 12px;">
+                <b style="font-size:12px;">🅰️ Nilai Default EA</b>
+                <p style="color: var(--text-muted); font-size: 10.5px; margin: 6px 0 10px 0;">
+                  Jalankan backtest langsung memakai nilai default/hardcode dari kode EA (tanpa mengubah parameter apa pun).
+                </p>
+                <button class="btn primary" style="width:100%;" onclick="runCvmBacktest()">▶ Jalankan (Default EA)</button>
+              </div>
+              <div style="border: 1px solid var(--border-soft); border-radius: var(--radius-sm); padding: 12px;">
+                <b style="font-size:12px;">🅱️ Parameter Manual (Hasil Parsing)</b>
+                <p style="color: var(--text-muted); font-size: 10.5px; margin: 6px 0 10px 0;">
+                  Lihat &amp; ubah semua parameter yang berhasil di-parsing dari EA (TP, SL, lot, dsb) sebelum menjalankan backtest.
+                </p>
+                <button class="btn blue" style="width:100%;" onclick="Stage2.revealParamPanel()">⚙️ Tampilkan &amp; Setel Parameter</button>
+              </div>
+            </div>
+          </div>
+
           <div class="card">
             <h3>
               <span>📈 Equity Curve + Trade Markers</span>
@@ -515,6 +537,7 @@
                 <tr style="text-align:left; color:var(--text-muted);">
                   <th style="padding:6px 8px;">#</th>
                   <th style="padding:6px 8px;">Arah</th>
+                  <th style="padding:6px 8px;">Lot</th>
                   <th style="padding:6px 8px;">Buka</th>
                   <th style="padding:6px 8px;">Entry</th>
                   <th style="padding:6px 8px;">Tutup</th>
@@ -523,7 +546,7 @@
                 </tr>
               </thead>
               <tbody id="simTradeHistoryBody">
-                <tr><td colspan="7" style="padding:10px 8px; color:var(--text-muted);">Belum ada trade.</td></tr>
+                <tr><td colspan="8" style="padding:10px 8px; color:var(--text-muted);">Belum ada trade.</td></tr>
               </tbody>
             </table>
           </div>
@@ -810,6 +833,7 @@
     const card = document.getElementById('aiExplainerCard');
     const box = document.getElementById('aiExplainerContent');
     const eaName = document.getElementById('eaName').value;
+    const choiceCard = document.getElementById('backtestChoiceCard');
 
     if (!code.trim()) {
       alert("Harap tempelkan kode MQL5 (.mq5) terlebih dahulu.");
@@ -817,21 +841,28 @@
     }
 
     card.style.display = 'block';
+    if (choiceCard) choiceCard.style.display = 'none';
     box.innerText = "AI sedang membaca & membedah struktur MQL5 serta mencari bug...";
 
     try {
-      const res = await fetch(`${API_BASE}/api/explain-ea`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: code, file_name: eaName || "Expert Advisor" })
-      });
-      const data = await res.json();
+      // Satu panggilan: teks penjelasan + parsing parameter sekaligus,
+      // supaya setelah "Bedah EA" langsung tersedia 2 pilihan backtest.
+      const data = await Stage2.explainAndParse(code, eaName || "Expert Advisor");
 
       if (data.explanation) {
         box.innerText = data.explanation;
         extractAndSetEAName(code);
       } else {
         box.innerText = data.error || "Gagal menganalisis kode.";
+      }
+
+      if (data.success) {
+        // Siapkan (isi) panel parameter Opsi B tanpa langsung menampilkannya.
+        if (data.editable && Object.keys(data.editable).length) {
+          Stage2.populateParamPanel(data);
+        }
+        // Tampilkan kartu pilihan: A. Default EA, B. Parameter Manual.
+        if (choiceCard) choiceCard.style.display = 'block';
       }
     } catch (e) {
       box.innerText = "Terjadi kesalahan koneksi ke AI Explainer.";
@@ -1407,7 +1438,7 @@
     if (!body) return;
 
     if (!visible.length) {
-      body.innerHTML = '<tr><td colspan="7" style="padding:10px 8px; color:var(--text-muted);">Belum ada trade.</td></tr>';
+      body.innerHTML = '<tr><td colspan="8" style="padding:10px 8px; color:var(--text-muted);">Belum ada trade.</td></tr>';
       return;
     }
 
@@ -1420,6 +1451,7 @@
       return `<tr style="border-top:1px solid var(--border-soft);">
         <td style="padding:5px 8px;">${t._index}</td>
         <td style="padding:5px 8px; color:${dirColor}; font-weight:700;">${t._direction || '-'}</td>
+        <td style="padding:5px 8px;">${(t._lot || 0).toFixed(2)}</td>
         <td style="padding:5px 8px;">${formatCandleTime(t._openTime)}</td>
         <td style="padding:5px 8px;">${price(t._entry)}</td>
         <td style="padding:5px 8px;">${isClosed ? formatCandleTime(t._closeTime) : 'OPEN'}</td>
