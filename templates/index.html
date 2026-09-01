@@ -255,6 +255,21 @@
     .mt5-badge.risk { background: rgba(244,63,94,0.12); color: var(--red); border: 1px solid rgba(244,63,94,0.3); }
     .mt5-badge.info { background: var(--gold-dim); color: var(--gold); border: 1px solid var(--gold-glow); }
     .mt5-badge.strategy { background: rgba(59,130,246,0.12); color: var(--blue); border: 1px solid rgba(59,130,246,0.3); }
+    .mt5-section-title { font-size: 11px; font-weight: 800; color: var(--gold); text-transform: uppercase; letter-spacing: 0.08em; padding: 10px 0 6px; border-bottom: 1px solid var(--border-soft); margin-top: 16px; margin-bottom: 4px; }
+    .mt5-summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+    .mt5-summary-card { background: var(--bg-soft); border: 1px solid var(--border-soft); border-radius: var(--radius-sm); padding: 14px 16px; }
+    .mt5-summary-card .label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+    .mt5-summary-card .value { font-size: 22px; font-weight: 800; font-family: var(--font-mono); }
+    .mt5-summary-card.profit .value { color: var(--green); }
+    .mt5-summary-card.loss .value { color: var(--red); }
+    .mt5-summary-card.neutral .value { color: var(--gold); }
+    .mt5-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .mt5-badge { padding: 4px 10px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+    .mt5-badge.verified { background: rgba(34,197,94,0.12); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
+    .mt5-badge.moderate { background: rgba(245,158,11,0.12); color: var(--yellow); border: 1px solid rgba(245,158,11,0.3); }
+    .mt5-badge.risk { background: rgba(244,63,94,0.12); color: var(--red); border: 1px solid rgba(244,63,94,0.3); }
+    .mt5-badge.info { background: var(--gold-dim); color: var(--gold); border: 1px solid var(--gold-glow); }
+    .mt5-badge.strategy { background: rgba(59,130,246,0.12); color: var(--blue); border: 1px solid rgba(59,130,246,0.3); }
 
     /* ==================== TERMINAL HEADER ==================== */
     .terminal-header {
@@ -1832,6 +1847,91 @@
     }
   }
 
+function computeMT5ExtendedMetrics(m, trades) {
+    // Compute additional MT5-style metrics from trades data
+    const t = normalizeTrades(trades || []);
+    const closed = t.filter(x => x._profit !== 0 || x._openTime !== '-');
+    const profits = closed.map(x => x._profit);
+    const wins = profits.filter(p => p > 0);
+    const losses = profits.filter(p => p < 0);
+    const netProfit = profits.reduce((a, b) => a + b, 0);
+    const grossProfit = wins.reduce((a, b) => a + b, 0);
+    const grossLoss = Math.abs(losses.reduce((a, b) => a + b, 0));
+    const initBal = toNumber(mtFind(m, ['initial_balance', 'initial_deposit']));
+    const finalBal = toNumber(mtFind(m, ['final_balance']));
+
+    // Long/Short breakdown
+    const longs = closed.filter(x => x._direction === 'BUY');
+    const longWins = longs.filter(x => x._profit > 0).length;
+    const shorts = closed.filter(x => x._direction === 'SELL');
+    const shortWins = shorts.filter(x => x._profit > 0).length;
+
+    // Consecutive streaks
+    let maxConsecWin = 0, maxConsecLoss = 0, curWin = 0, curLoss = 0;
+    let maxConsecWinAmt = 0, maxConsecLossAmt = 0, curWinAmt = 0, curLossAmt = 0;
+    for (const p of profits) {
+      if (p > 0) {
+        curWin++; curLoss = 0;
+        curWinAmt += p; curLossAmt = 0;
+        if (curWin > maxConsecWin) maxConsecWin = curWin;
+        if (curWinAmt > maxConsecWinAmt) maxConsecWinAmt = curWinAmt;
+      } else if (p < 0) {
+        curLoss++; curWin = 0;
+        curLossAmt += Math.abs(p); curWinAmt = 0;
+        if (curLoss > maxConsecLoss) maxConsecLoss = curLoss;
+        if (curLossAmt > maxConsecLossAmt) maxConsecLossAmt = curLossAmt;
+      }
+    }
+
+    // Largest trade
+    const largestProfit = profits.length ? Math.max(...profits) : 0;
+    const largestLoss = profits.length ? Math.min(...profits) : 0;
+    const avgWin = wins.length ? wins.reduce((a,b) => a+b, 0) / wins.length : 0;
+    const avgLoss = losses.length ? Math.abs(losses.reduce((a,b) => a+b, 0) / losses.length) : 0;
+    const avgTrade = profits.length ? netProfit / profits.length : 0;
+
+    return {
+      'largest_profit_trade': largestProfit,
+      'largest_loss_trade': largestLoss,
+      'average_profit_trade': avgWin,
+      'average_loss_trade': avgLoss,
+      'max_consecutive_wins_amount': maxConsecWinAmt,
+      'max_consecutive_losses_amount': maxConsecLossAmt,
+      'max_consecutive_profit_count': maxConsecWin,
+      'max_consecutive_loss_count': maxConsecLoss,
+      'average_consecutive_wins': profits.length ? (maxConsecWin > 0 ? Math.round(profits.filter(p=>p>0).length / Math.ceil(maxConsecWin)) : 0) : 0,
+      'average_consecutive_losses': profits.length ? (maxConsecLoss > 0 ? Math.round(profits.filter(p=>p<0).length / Math.ceil(maxConsecLoss)) : 0) : 0,
+      'short_trades': `${shorts.length} (${shorts.length ? Math.round(shortWins/shorts.length*100) : 0}%)`,
+      'long_trades': `${longs.length} (${longs.length ? Math.round(longWins/longs.length*100) : 0}%)`,
+      'profit_trades_pct': `${wins.length} (${wins.length ? Math.round(wins.length/profits.length*100) : 0}%)`,
+      'loss_trades_pct': `${losses.length} (${losses.length ? Math.round(losses.length/profits.length*100) : 0}%)`,
+      'expected_payoff': avgTrade,
+      'total_net_profit': netProfit,
+      'gross_profit': grossProfit,
+      'gross_loss': grossLoss,
+      'total_trades': closed.length,
+      'initial_deposit': initBal,
+      'final_balance': finalBal || (initBal + netProfit),
+      'bars': mtFind(m, ['total_rows_processed', 'bars']) || 0,
+      'symbols': mtFind(m, ['symbol_raw', 'symbols']) || '-',
+    };
+  }
+
+  function autoLoadLatestReport() {
+    const sel = document.getElementById('reportJobSelect');
+    if (sel.options.length > 1) {
+      sel.selectedIndex = 1;
+      loadFullReport();
+    } else {
+      if (currentJobId) {
+        sel.value = currentJobId;
+        loadFullReport();
+      } else {
+        alert('Belum ada job tersedia. Jalankan backtest terlebih dahulu.');
+      }
+    }
+  }
+
   function renderFullReportMetrics(m, jobId, trades) {
     const box = document.getElementById('fullReportBox');
     mt5Charts.forEach(c => c.destroy());
@@ -1949,8 +2049,7 @@
     renderMiniBarChart('mt5ChartHours', Array.from({ length: 24 }, (_, i) => String(i)), dist.hours);
     renderMiniBarChart('mt5ChartWeekdays', ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], dist.weekdays);
     renderMiniBarChart('mt5ChartMonths', ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], dist.months);
-  }
-</script>
+  }</script>
 
 </body>
 </html>
